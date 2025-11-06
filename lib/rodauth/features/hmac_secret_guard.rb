@@ -63,8 +63,6 @@ module Rodauth
         end
       end
 
-      # instance = klass.allocate.freeze
-      # klass.define_singleton_method(:session_secret) { instance.hmac_secret }
       validate_secrets! if validate_secrets_on_configure?
     end
 

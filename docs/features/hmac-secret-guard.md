@@ -552,12 +552,16 @@ end
 
 ### Custom Validation Logic
 
+> **Note:** `validate_secrets!` does not accept a block. To add custom validation logic, override the `validate_secrets!` method in your configuration.
+
 ```ruby
 plugin :rodauth do
   enable :hmac_secret_guard
 
-  # Override validation method
+  # Override validate_secrets! to add custom checks
   validate_secrets! do
+    super() # Call the original validation
+
     secret = hmac_secret
 
     # Custom length requirement
