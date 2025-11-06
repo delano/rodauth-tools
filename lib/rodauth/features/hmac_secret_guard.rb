@@ -47,7 +47,8 @@ module Rodauth
     auth_value_method :hmac_secret_env_key, 'HMAC_SECRET'
     auth_value_method :production_env_check, proc { ENV.fetch('RACK_ENV', 'production') == 'production' }
     auth_value_method :validate_secrets_on_configure?, true
-    auth_value_method :development_hmac_secret_fallback, 'dev-only-insecure-example-hmac-secret-needs-to-be-changed-in-prod'
+    auth_value_method :development_hmac_secret_fallback,
+                      'dev-only-insecure-example-hmac-secret-needs-to-be-changed-in-prod'
 
     translatable_method :hmac_secret_missing_error, 'HMAC_SECRET environment variable must be set in production'
     translatable_method :hmac_secret_dev_warning, '[rodauth] WARNING: Using default HMAC secret for development only'
@@ -58,9 +59,7 @@ module Rodauth
       # Auto-set hmac_secret if not already set
       if hmac_secret.nil? || (hmac_secret.respond_to?(:empty?) && hmac_secret.empty?)
         env_value = ENV.delete(hmac_secret_env_key)
-        if env_value && !env_value.empty?
-          self.class.send(:define_method, :hmac_secret) { env_value }
-        end
+        self.class.send(:define_method, :hmac_secret) { env_value } if env_value && !env_value.empty?
       end
 
       validate_secrets! if validate_secrets_on_configure?
@@ -91,16 +90,14 @@ module Rodauth
       current_secret = hmac_secret
 
       # Check if secret is missing or empty
-      if current_secret.nil? || (current_secret.respond_to?(:empty?) && current_secret.empty?)
-        if production?
-          # In production, raise an error
-          raise Rodauth::ConfigurationError, hmac_secret_missing_error
-        else
-          # In development, warn and set a fallback
-          warn_dev_secret
-          self.class.send(:define_method, :hmac_secret) { development_hmac_secret_fallback }
-        end
-      end
+      return unless current_secret.nil? || (current_secret.respond_to?(:empty?) && current_secret.empty?)
+      raise Rodauth::ConfigurationError, hmac_secret_missing_error if production?
+
+      # In production, raise an error
+
+      # In development, warn and set a fallback
+      warn_dev_secret
+      self.class.send(:define_method, :hmac_secret) { development_hmac_secret_fallback }
     end
 
     private
@@ -113,7 +110,7 @@ module Rodauth
       if respond_to?(:logger) && logger
         logger.warn(hmac_secret_dev_warning)
       else
-        $stderr.puts(hmac_secret_dev_warning)
+        warn(hmac_secret_dev_warning)
       end
     end
   end

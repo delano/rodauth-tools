@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+
 # lib/rodauth/features/external_identity.rb
 
 #
@@ -222,13 +223,14 @@ module Rodauth
 
         # Store configuration on the Auth class
         # Use class instance variable to store per-class configuration
-        @auth.instance_variable_set(:@_external_identity_columns, {}) unless @auth.instance_variable_get(:@_external_identity_columns)
+        unless @auth.instance_variable_get(:@_external_identity_columns)
+          @auth.instance_variable_set(:@_external_identity_columns,
+                                      {})
+        end
         columns = @auth.instance_variable_get(:@_external_identity_columns)
 
         # Check for duplicate declarations using column name as key
-        if columns.key?(column)
-          raise ArgumentError, "external_identity_column :#{column} already declared"
-        end
+        raise ArgumentError, "external_identity_column :#{column} already declared" if columns.key?(column)
 
         # Store configuration (using column as both key and value)
         columns[column] = {
@@ -263,7 +265,7 @@ module Rodauth
       end
     end
 
-    # Note: external_identity_column is defined in configuration_module_eval above
+    # NOTE: external_identity_column is defined in configuration_module_eval above
     # It's available during configuration but not as an instance method
 
     # Get list of all declared external identity column names
@@ -340,20 +342,20 @@ module Rodauth
 
         # Safely get the value
         value = begin
-                  account ? account[column] : nil
-                rescue StandardError
-                  nil
-                end
+          account ? account[column] : nil
+        rescue StandardError
+          nil
+        end
 
         # Check if column exists in database
         column_exists = begin
-                          db.schema(accounts_table).any? { |col| col[0] == column }
-                        rescue StandardError
-                          nil  # Unknown if can't check
-                        end
+          db.schema(accounts_table).any? { |col| col[0] == column }
+        rescue StandardError
+          nil # Unknown if can't check
+        end
 
         # Check if column is in select (nil means select all)
-        in_select = current_select.nil? ? true : current_select.include?(column)
+        in_select = current_select.nil? || current_select.include?(column)
 
         {
           column: column,
@@ -396,9 +398,7 @@ module Rodauth
       # Apply validator if present
       if config[:validator]
         is_valid = instance_exec(formatted_value, &config[:validator])
-        unless is_valid
-          raise ArgumentError, "Invalid format for #{column}: #{value.inspect}"
-        end
+        raise ArgumentError, "Invalid format for #{column}: #{value.inspect}" unless is_valid
       end
 
       true
@@ -526,11 +526,9 @@ module Rodauth
       # Security-critical: MUST raise on failure
       result = instance_exec(formatted_value, token, &config[:handshake])
 
-      if result
-        true
-      else
-        raise "Handshake verification failed for #{column}"
-      end
+      raise "Handshake verification failed for #{column}" unless result
+
+      true
     end
 
     # Generate external identities during account creation
@@ -586,7 +584,8 @@ module Rodauth
       when false
         # Skip checking entirely
       else
-        raise ArgumentError, "external_identity_check_columns must be true, false, or :autocreate, got: #{external_identity_check_columns.inspect}"
+        raise ArgumentError,
+              "external_identity_check_columns must be true, false, or :autocreate, got: #{external_identity_check_columns.inspect}"
       end
 
       # Always check that columns are included in account_select if they should be
@@ -606,9 +605,9 @@ module Rodauth
       current_select = account_select
 
       # Get columns to add
-      columns_to_add = external_identity_columns_config.select { |_name, config|
+      columns_to_add = external_identity_columns_config.select do |_name, config|
         config[:include_in_select]
-      }.keys
+      end.keys
 
       # Return early if no columns to add
       return if columns_to_add.empty?
@@ -673,9 +672,7 @@ module Rodauth
         # Apply validator if configured
         if config[:validator]
           is_valid = instance_exec(value, &config[:validator])
-          unless is_valid
-            raise ArgumentError, "Generated value for #{column} failed validation: #{value.inspect}"
-          end
+          raise ArgumentError, "Generated value for #{column} failed validation: #{value.inspect}" unless is_valid
         end
 
         # Set the account column
@@ -722,7 +719,7 @@ module Rodauth
 
       column_list = missing.map { |col| ":#{col}" }.join(', ')
       raise ArgumentError, "External identity columns not found in #{accounts_table} table: #{column_list}. " \
-                           "Add columns to database, set external_identity_check_columns to false, or use :autocreate mode."
+                           'Add columns to database, set external_identity_check_columns to false, or use :autocreate mode.'
     end
 
     # Check columns and inform table_guard if any are missing
@@ -733,27 +730,26 @@ module Rodauth
       return if missing.empty?
 
       # If table_guard is enabled, inform it about missing columns
-      if respond_to?(:table_guard_mode)
-        # Register missing external identity columns with table_guard
-        register_external_columns_with_table_guard(missing)
-      else
-        # No table_guard available - provide helpful error with migration code
-        raise ArgumentError, build_external_identity_columns_error(missing)
-      end
+      raise ArgumentError, build_external_identity_columns_error(missing) unless respond_to?(:table_guard_mode)
+
+      # Register missing external identity columns with table_guard
+      register_external_columns_with_table_guard(missing)
+
+      # No table_guard available - provide helpful error with migration code
     end
 
     # Find columns that don't exist in the database
     #
     # @return [Array<Symbol>] Array of missing column names
     def find_missing_columns
-      return [] unless db  # Skip if no database available
+      return [] unless db # Skip if no database available
 
       schema = begin
-                 db.schema(accounts_table)
-               rescue StandardError
-                 # Can't check - database might not exist yet
-                 return []
-               end
+        db.schema(accounts_table)
+      rescue StandardError
+        # Can't check - database might not exist yet
+        return []
+      end
 
       column_names = schema.map { |col| col[0] }
 
@@ -803,18 +799,18 @@ module Rodauth
       #
       # Check if we should handle columns: either validation is enabled OR sequel_mode is set
       # (sequel_mode works even in silent mode since it indicates intent to create/generate)
-      if should_check_tables? || table_guard_sequel_mode
-        # Get the missing columns we just registered
-        missing_cols = missing_columns
-        return if missing_cols.empty?
+      return unless should_check_tables? || table_guard_sequel_mode
 
-        # Handle columns according to table_guard's configuration
-        # (skip validation in silent mode, but allow sequel operations)
-        handle_column_guard_mode(missing_cols) if should_check_tables?
+      # Get the missing columns we just registered
+      missing_cols = missing_columns
+      return if missing_cols.empty?
 
-        # Generate/create columns if sequel mode is configured
-        handle_sequel_generation([], missing_cols) if table_guard_sequel_mode
-      end
+      # Handle columns according to table_guard's configuration
+      # (skip validation in silent mode, but allow sequel operations)
+      handle_column_guard_mode(missing_cols) if should_check_tables?
+
+      # Generate/create columns if sequel mode is configured
+      handle_sequel_generation([], missing_cols) if table_guard_sequel_mode
     end
 
     # Extract column type from configuration
@@ -825,8 +821,8 @@ module Rodauth
     # @return [Class] Column type (Integer, String, etc.)
     def extract_column_type(config)
       config.dig(:options, :sequel, :type) ||
-      config.dig(:options, :type) ||
-      String
+        config.dig(:options, :type) ||
+        String
     end
 
     # Extract column null setting from configuration
@@ -840,7 +836,7 @@ module Rodauth
       elsif config.dig(:options)&.key?(:null)
         config.dig(:options, :null)
       else
-        true  # External IDs are optional by default
+        true # External IDs are optional by default
       end
     end
 
@@ -850,7 +846,7 @@ module Rodauth
     # @return [Object, nil] Default value or nil
     def extract_column_default(config)
       config.dig(:options, :sequel, :default) ||
-      config.dig(:options, :default)
+        config.dig(:options, :default)
     end
 
     # Extract column unique setting from configuration
@@ -859,8 +855,8 @@ module Rodauth
     # @return [Boolean] Whether column has unique constraint
     def extract_column_unique(config)
       config.dig(:options, :sequel, :unique) ||
-      config.dig(:options, :unique) ||
-      false
+        config.dig(:options, :unique) ||
+        false
     end
 
     # Extract column size from configuration
@@ -869,7 +865,7 @@ module Rodauth
     # @return [Integer, nil] Column size or nil
     def extract_column_size(config)
       config.dig(:options, :sequel, :size) ||
-      config.dig(:options, :size)
+        config.dig(:options, :size)
     end
 
     # Extract column index setting from configuration
@@ -878,8 +874,8 @@ module Rodauth
     # @return [Boolean, Hash] Index configuration
     def extract_column_index(config)
       config.dig(:options, :sequel, :index) ||
-      config.dig(:options, :index) ||
-      false
+        config.dig(:options, :index) ||
+        false
     end
 
     # Build error message for missing external identity columns with migration example
@@ -911,19 +907,19 @@ module Rodauth
     # @param missing [Array<Symbol>] Array of missing column names
     # @return [String] Sequel migration code
     def generate_external_identity_migration_code(missing)
-      lines = ["Sequel.migration do", "  up do", "    alter_table :#{accounts_table} do"]
+      lines = ['Sequel.migration do', '  up do', "    alter_table :#{accounts_table} do"]
 
       missing.each do |column|
         lines << "      add_column :#{column}, String"
       end
 
-      lines += ["    end", "  end", "", "  down do", "    alter_table :#{accounts_table} do"]
+      lines += ['    end', '  end', '', '  down do', "    alter_table :#{accounts_table} do"]
 
       missing.each do |column|
         lines << "      drop_column :#{column}"
       end
 
-      lines += ["    end", "  end", "end"]
+      lines += ['    end', '  end', 'end']
 
       lines.join("\n")
     end
@@ -933,20 +929,18 @@ module Rodauth
     # Provides helpful warnings if configuration might not work as expected
     def validate_account_select_inclusion!
       current_select = account_select
-      return unless current_select  # Skip if account_select not defined (e.g., no login feature)
+      return unless current_select # Skip if account_select not defined (e.g., no login feature)
 
       missing = []
       external_identity_columns_config.each do |column, config|
-        if config[:include_in_select] && !current_select.include?(column)
-          missing << ":#{column}"
-        end
+        missing << ":#{column}" if config[:include_in_select] && !current_select.include?(column)
       end
 
       return if missing.empty?
 
-      warn "[external_identity] WARNING: Columns #{missing.join(', ')} marked for inclusion " \
-           "but not in account_select. This may indicate a configuration order issue. " \
-           "The feature should have added them automatically."
+      warn "[external_identity] WARNING: Columns #{missing.join(", ")} marked for inclusion " \
+           'but not in account_select. This may indicate a configuration order issue. ' \
+           'The feature should have added them automatically.'
     end
   end
 end
