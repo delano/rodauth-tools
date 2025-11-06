@@ -1,9 +1,10 @@
 # frozen_string_literal: true
+
 # lib/rodauth/features/table_guard.rb
 
 # Ensure dependencies are loaded (they should be via require 'rodauth/tools')
-require_relative "../table_inspector" unless defined?(Rodauth::TableInspector)
-require_relative "../sequel_generator" unless defined?(Rodauth::SequelGenerator)
+require_relative '../table_inspector' unless defined?(Rodauth::TableInspector)
+require_relative '../sequel_generator' unless defined?(Rodauth::SequelGenerator)
 
 #
 # Enable with:
@@ -61,9 +62,9 @@ module Rodauth
     auth_value_method :table_guard_sequel_mode, nil
     auth_value_method :table_guard_skip_tables, []
     auth_value_method :table_guard_check_columns?, true
-    auth_value_method :table_guard_migration_path, "db/migrate"
+    auth_value_method :table_guard_migration_path, 'db/migrate'
     auth_value_method :table_guard_logger, nil
-    auth_value_method :table_guard_logger_name, nil  # For SemanticLogger integration
+    auth_value_method :table_guard_logger_name, nil # For SemanticLogger integration
 
     # Public API methods
     auth_methods(
@@ -167,22 +168,25 @@ module Rodauth
       missing_cols = missing_columns
 
       # Special case: :recreate and :drop modes always run, even when no tables are missing
-      if missing.empty? && missing_cols.empty? && ![:recreate, :drop].include?(table_guard_sequel_mode)
+      if missing.empty? && missing_cols.empty? && !%i[recreate drop].include?(table_guard_sequel_mode)
         rodauth_info('')
-        rodauth_info("─" * 70)
-        rodauth_info("✅ TableGuard: All required tables and columns exist")
+        rodauth_info('─' * 50)
+        rodauth_info('✅ TableGuard: All required tables and columns exist')
         rodauth_info("   #{table_configuration.size} tables validated successfully")
-        rodauth_info("   #{list_all_required_columns.size} columns validated successfully") if list_all_required_columns.any?
-        rodauth_info("─" * 70)
+        if list_all_required_columns.any?
+          rodauth_info("   #{list_all_required_columns.size} columns validated successfully")
+        end
+        rodauth_info('─' * 50)
         rodauth_info('')
         return
       end
 
       # Handle based on validation mode (unless recreate/drop mode which handles its own validation)
-      handle_table_guard_mode(missing) unless [:recreate, :drop].include?(table_guard_sequel_mode)
+      handle_table_guard_mode(missing) unless %i[recreate drop].include?(table_guard_sequel_mode)
 
       # Handle missing columns separately if validation mode passes
-      handle_column_guard_mode(missing_cols) if missing_cols.any? && ![:recreate, :drop].include?(table_guard_sequel_mode)
+      handle_column_guard_mode(missing_cols) if missing_cols.any? && !%i[recreate
+                                                                         drop].include?(table_guard_sequel_mode)
 
       # Generate Sequel if configured
       handle_sequel_generation(missing, missing_cols) if table_guard_sequel_mode
@@ -213,7 +217,7 @@ module Rodauth
     #
     # @return [Array<Symbol>] Table method names
     def all_table_methods
-      methods.select { |m| m.to_s.end_with?("_table") }
+      methods.select { |m| m.to_s.end_with?('_table') }
     end
 
     # Check if a table exists in the database
@@ -479,7 +483,7 @@ module Rodauth
       else
         raise Rodauth::ConfigurationError,
               "Invalid table_guard_mode: #{mode.inspect}. " \
-              "Expected :silent, :skip, :warn, :error, :raise, :halt, or a Proc."
+              'Expected :silent, :skip, :warn, :error, :raise, :halt, or a Proc.'
       end
     end
 
@@ -550,7 +554,7 @@ module Rodauth
       else
         raise Rodauth::ConfigurationError,
               "Invalid table_guard_mode: #{mode.inspect}. " \
-              "Expected :silent, :skip, :warn, :error, :raise, :halt, or a Proc."
+              'Expected :silent, :skip, :warn, :error, :raise, :halt, or a Proc.'
       end
     end
 
@@ -581,7 +585,9 @@ module Rodauth
 
       when :sync
         unless %w[dev development test].any? { |env| ENV['RACK_ENV']&.start_with?(env) }
-          rodauth_error("[table_guard] :sync mode only available in dev/test environments (current: #{ENV['RACK_ENV']})")
+          rodauth_error("[table_guard] :sync mode only available in dev/test environments (current: #{ENV.fetch(
+            "RACK_ENV", nil
+          )})")
           return
         end
 
@@ -596,7 +602,9 @@ module Rodauth
 
       when :recreate
         unless %w[dev development test].any? { |env| ENV['RACK_ENV']&.start_with?(env) }
-          rodauth_error("[table_guard] :recreate mode only available in dev/test environments (current: #{ENV['RACK_ENV']})")
+          rodauth_error("[table_guard] :recreate mode only available in dev/test environments (current: #{ENV.fetch(
+            "RACK_ENV", nil
+          )})")
           return
         end
 
@@ -624,7 +632,9 @@ module Rodauth
         # time. This will drop the tables so that the migrations run every time.
       when :drop
         unless %w[dev development test].any? { |env| ENV['RACK_ENV']&.start_with?(env) }
-          rodauth_error("[table_guard] :drop mode only available in dev/test environments (current: #{ENV['RACK_ENV']})")
+          rodauth_error("[table_guard] :drop mode only available in dev/test environments (current: #{ENV.fetch(
+            "RACK_ENV", nil
+          )})")
           return
         end
 
@@ -636,11 +646,10 @@ module Rodauth
         drop_tables(all_tables.reverse)
 
         # Drop Sequel migration tracking tables so migrations re-run from scratch
-        drop_tables([:schema_info, :schema_migrations])
+        drop_tables(%i[schema_info schema_migrations])
 
         rodauth_info("[table_guard] Dropped #{all_tables.size} table(s) and migration tracking")
-        rodauth_info("[table_guard] Migrations will run from scratch on next execution")
-
+        rodauth_info('[table_guard] Migrations will run from scratch on next execution')
 
       else
         rodauth_error("[table_guard] Invalid sequel mode: #{table_guard_sequel_mode.inspect}")
@@ -648,14 +657,14 @@ module Rodauth
     rescue StandardError => e
       rodauth_error("[table_guard] Sequel generation failed: #{e.class} - #{e.message}")
       rodauth_error("  Location: #{e.backtrace.first}")
-      raise if [:raise, :halt, :exit].include?(table_guard_mode)
+      raise if %i[raise halt exit].include?(table_guard_mode)
     end
 
     # Check if the database supports CASCADE on DELETE
     #
     # @return [Boolean] True if using a db engine that supports DELETE ... CASCADE
     def cascade_supported?
-      [:postgres, :mysql].include?(db.database_type)
+      %i[postgres mysql].include?(db.database_type)
     end
 
     # Drop tables with proper CASCADE handling for non-SQLite databases
@@ -686,15 +695,15 @@ module Rodauth
     # which will display the success message instead of leaving
     # the error/warning messages as the last output
     def revalidate_after_creation
-      rodauth_info("")  # Blank line for readability
+      rodauth_info('') # Blank line for readability
 
       still_missing = missing_tables
 
       if still_missing.empty?
-        rodauth_info("=" * 70)
-        rodauth_info("✓ [table_guard] All required tables now exist")
+        rodauth_info('=' * 70)
+        rodauth_info('✓ [table_guard] All required tables now exist')
         rodauth_info("  #{table_configuration.size} tables validated successfully")
-        rodauth_info("=" * 70)
+        rodauth_info('=' * 70)
       else
         rodauth_error("[table_guard] Still missing #{still_missing.size} table(s) after creation!")
         still_missing.each do |info|
@@ -707,7 +716,7 @@ module Rodauth
     #
     # @return [String] Full path to migration file
     def generate_migration_filename
-      timestamp = Time.now.strftime("%Y%m%d%H%M%S")
+      timestamp = Time.now.strftime('%Y%m%d%H%M%S')
       filename = "#{timestamp}_create_rodauth_tables.rb"
       File.join(table_guard_migration_path, filename)
     end
@@ -717,14 +726,14 @@ module Rodauth
     # @param missing [Array<Hash>] Missing table information
     # @return [String] Formatted message
     def build_missing_tables_message(missing)
-      lines = ["Rodauth [table_guard] Missing required database tables!"]
-      lines << ""
+      lines = ['Rodauth [table_guard] Missing required database tables!']
+      lines << ''
 
       missing.each do |info|
         lines << "  - Table: #{info[:table]} (feature: #{info[:feature]}, method: #{info[:method]})"
       end
 
-      lines << ""
+      lines << ''
       lines << build_migration_hints(missing)
 
       lines.join("\n")
@@ -735,7 +744,7 @@ module Rodauth
     # @param missing [Array<Hash>] Missing table information
     # @return [String] Formatted error message
     def build_missing_tables_error(missing)
-      table_list = missing.map { |i| i[:table] }.join(", ")
+      table_list = missing.map { |i| i[:table] }.join(', ')
       "CRITICAL: Missing Rodauth tables - #{table_list}"
     end
 
@@ -745,29 +754,29 @@ module Rodauth
     # @return [String] Formatted hints
     def build_migration_hints(missing)
       hints = []
-      hints << ""
-      hints << "⚠️  DATABASE OPERATIONS WILL FAIL UNTIL TABLES ARE CREATED"
-      hints << ""
+      hints << ''
+      hints << '⚠️  DATABASE OPERATIONS WILL FAIL UNTIL TABLES ARE CREATED'
+      hints << ''
 
       unique_tables = missing.map { |i| i[:table] }.uniq
 
       if table_guard_sequel_mode.nil?
-        hints << "Quick fix for development (creates tables automatically):"
-        hints << "  table_guard_sequel_mode :create"
-        hints << ""
-        hints << "Other options:"
-        hints << "  table_guard_sequel_mode :log        # Show migration code"
-        hints << "  table_guard_sequel_mode :migration  # Generate migration file"
-        hints << ""
+        hints << 'Quick fix for development (creates tables automatically):'
+        hints << '  table_guard_sequel_mode :create'
+        hints << ''
+        hints << 'Other options:'
+        hints << '  table_guard_sequel_mode :log        # Show migration code'
+        hints << '  table_guard_sequel_mode :migration  # Generate migration file'
+        hints << ''
       end
 
-      hints << "Required tables:"
+      hints << 'Required tables:'
       unique_tables.each do |table|
         hints << "  - #{table}"
       end
 
-      hints << ""
-      hints << "To disable checking: table_guard_mode :silent"
+      hints << ''
+      hints << 'To disable checking: table_guard_mode :silent'
       hints << "To skip specific tables: table_guard_skip_tables #{unique_tables.inspect}"
 
       hints.join("\n")
@@ -778,8 +787,8 @@ module Rodauth
     # @param missing_cols [Array<Hash>] Missing column information
     # @return [String] Formatted message
     def build_missing_columns_message(missing_cols)
-      lines = ["Rodauth [table_guard] Missing required database columns!"]
-      lines << ""
+      lines = ['Rodauth [table_guard] Missing required database columns!']
+      lines << ''
 
       # Group by table
       by_table = missing_cols.group_by { |col| col[:table] }
@@ -790,7 +799,7 @@ module Rodauth
         end
       end
 
-      lines << ""
+      lines << ''
       lines << build_column_migration_hints(missing_cols)
 
       lines.join("\n")
@@ -801,7 +810,7 @@ module Rodauth
     # @param missing_cols [Array<Hash>] Missing column information
     # @return [String] Formatted error message
     def build_missing_columns_error(missing_cols)
-      column_list = missing_cols.map { |c| "#{c[:table]}.#{c[:column]}" }.join(", ")
+      column_list = missing_cols.map { |c| "#{c[:table]}.#{c[:column]}" }.join(', ')
       "CRITICAL: Missing Rodauth columns - #{column_list}"
     end
 
@@ -811,27 +820,27 @@ module Rodauth
     # @return [String] Formatted hints
     def build_column_migration_hints(missing_cols)
       hints = []
-      hints << ""
-      hints << "⚠️  DATABASE OPERATIONS MAY FAIL UNTIL COLUMNS ARE ADDED"
-      hints << ""
+      hints << ''
+      hints << '⚠️  DATABASE OPERATIONS MAY FAIL UNTIL COLUMNS ARE ADDED'
+      hints << ''
 
       if table_guard_sequel_mode.nil?
-        hints << "Quick fix for development (adds columns automatically):"
-        hints << "  table_guard_sequel_mode :create"
-        hints << ""
-        hints << "Other options:"
-        hints << "  table_guard_sequel_mode :log        # Show migration code"
-        hints << "  table_guard_sequel_mode :migration  # Generate migration file"
-        hints << ""
+        hints << 'Quick fix for development (adds columns automatically):'
+        hints << '  table_guard_sequel_mode :create'
+        hints << ''
+        hints << 'Other options:'
+        hints << '  table_guard_sequel_mode :log        # Show migration code'
+        hints << '  table_guard_sequel_mode :migration  # Generate migration file'
+        hints << ''
       end
 
-      hints << "Required columns:"
+      hints << 'Required columns:'
       missing_cols.each do |col|
         hints << "  - #{col[:table]}.#{col[:column]} (#{col[:type]}, #{col[:feature]})"
       end
 
-      hints << ""
-      hints << "To disable checking: table_guard_mode :silent"
+      hints << ''
+      hints << 'To disable checking: table_guard_mode :silent'
 
       hints.join("\n")
     end
@@ -857,9 +866,7 @@ module Rodauth
       result = table_guard_logger
 
       # If no direct logger but name provided, look up SemanticLogger
-      if !result && table_guard_logger_name && defined?(SemanticLogger)
-        result = SemanticLogger[table_guard_logger_name]
-      end
+      result = SemanticLogger[table_guard_logger_name] if !result && table_guard_logger_name && defined?(SemanticLogger)
 
       # Fallback chain if still no logger
       result ||= (respond_to?(:logger) ? logger : nil) ||
@@ -868,8 +875,8 @@ module Rodauth
       # Warn once if logger appears to be SemanticLogger but has no appenders
       if result && result.class.name&.include?('SemanticLogger') &&
          defined?(SemanticLogger) && SemanticLogger.appenders.empty?
-        warn "[table_guard] WARNING: SemanticLogger has no appenders configured. " \
-             "Add: SemanticLogger.add_appender(io: STDOUT, level: :info)"
+        warn '[table_guard] WARNING: SemanticLogger has no appenders configured. ' \
+             'Add: SemanticLogger.add_appender(io: STDOUT, level: :info)'
       end
 
       result

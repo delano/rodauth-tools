@@ -29,7 +29,42 @@ bundle install
 
 ## Features
 
-### 1. External Identity Feature
+### 1. HMAC Secret Guard Feature
+
+Automatically configure and validate HMAC secrets at application startup to prevent deployment errors.
+
+```ruby
+class RodauthApp < Roda
+  plugin :rodauth do
+    enable :hmac_secret_guard
+
+    # Production: Raises error if HMAC_SECRET missing
+    # Development: Uses fallback secret with warning
+  end
+end
+```
+
+**Key Features:**
+
+- Automatic loading from `HMAC_SECRET` environment variable
+- Production mode: Raises `ConfigurationError` if secret missing
+- Development mode: Logs warning and uses fallback
+- Deletes secret from ENV after loading (security)
+- Configurable production detection and error messages
+- Public methods: `production?`, `validate_secrets!`
+
+**Configuration Options:**
+
+- `hmac_secret_env_key` - Environment variable name (default: `'HMAC_SECRET'`)
+- `production_env_check` - Proc or boolean for production detection
+- `validate_secrets_on_configure?` - Enable/disable validation (default: `true`)
+- `development_hmac_secret_fallback` - Fallback secret for development
+- `hmac_secret_missing_error` - Error message for production
+- `hmac_secret_dev_warning` - Warning message for development
+
+**Documentation:** [docs/features/hmac-secret-guard.md](docs/features/hmac-secret-guard.md)
+
+### 2. External Identity Feature
 
 Store external service identifiers in your accounts table with automatic helper methods.
 
@@ -71,7 +106,7 @@ rodauth.elasticsearch_doc_id # => "doc_789xyz"
 
 **Documentation:** [docs/features/external-identity.md](docs/features/external-identity.md)
 
-### 2. Table Guard External Feature
+### 3. Table Guard External Feature
 
 Validates that required database tables exist for enabled Rodauth features.
 
@@ -126,7 +161,7 @@ rodauth.missing_tables
 # => [{method: :otp_keys_table, table: :account_otp_keys}, ...]
 ```
 
-### 3. Sequel Migration Generator
+### 4. Sequel Migration Generator
 
 Generate database migrations for Rodauth features.
 
@@ -218,6 +253,7 @@ bin/console
 
 ## Documentation
 
+- **[HMAC Secret Guard Feature](docs/features/hmac-secret-guard.md)** - Validate HMAC secrets at startup
 - **[External Identity Feature](docs/features/external-identity.md)** - Track external service identifiers
 - **[Table Guard Feature](docs/features/table-guard.md)** - Validate required database tables
 - **[Sequel Migrations](docs/sequel-migrations.md)** - Integrating table_guard with Sequel migrations
