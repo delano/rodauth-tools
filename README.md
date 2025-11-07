@@ -3,7 +3,31 @@
 Framework-agnostic utilities for [Rodauth](http://rodauth.jeremyevans.net) authentication. Provides external Rodauth features and Sequel migration generators.
 
 > [!WARNING]
-> This project is in early alpha. APIs may change significantly. Not ready for prime time.
+> **Development Status**: This is an experimental learning/reference project.
+> - ✅ Features are functional and tested
+> - ⚠️  APIs may change without notice
+> - 🚫 Not published to RubyGems (clone and use locally)
+> - 💡 Intended as reference implementation for Rodauth extensibility
+
+## Quick Start
+
+```ruby
+# 1. Add table_guard to catch missing tables at startup
+class RodauthApp < Roda
+  plugin :rodauth do
+    enable :login, :logout
+    enable :table_guard  # ← Validates tables exist
+
+    # Production: fail fast if tables missing
+    table_guard_mode :raise
+  end
+end
+
+# 2. Run your app - catches problems immediately!
+# => Rodauth::ConfigurationError: Missing required database tables!
+#    - accounts (feature: base)
+#    - account_password_hashes (feature: base)
+```
 
 ## Overview
 
@@ -15,92 +39,72 @@ Rodauth::Tools provides utilities that work with any Rodauth setup, regardless o
 This is NOT a framework adapter. For framework integration, use:
 
 - Rails: [rodauth-rails](https://github.com/janko/rodauth-rails)
-- Others: Integrate Rodauth directly - [see integration guide](docs/integration.md)
+- Others: Integrate Rodauth directly - [see integration guide](docs/rodauth-integration.md)
 
 ## Installation
 
-Clone this repository:
+This project is not published as a gem. To use it:
 
 ```bash
+# Option 1: Clone and reference locally
 git clone https://github.com/delano/rodauth-tools
 cd rodauth-tools
 bundle install
+
+# Option 2: Add as git dependency (Gemfile)
+gem 'rodauth-tools', git: 'https://github.com/delano/rodauth-tools'
+
+# Option 3: Copy individual features into your project
+# Features in lib/rodauth/features/ are self-contained
 ```
 
 ## Features
 
-### 1. HMAC Secret Guard Feature
+### 1. Table Guard Feature
 
-Automatically configure and validate HMAC secrets at application startup to prevent deployment errors.
-
-```ruby
-class RodauthApp < Roda
-  plugin :rodauth do
-    enable :hmac_secret_guard
-
-    # Production: Raises error if HMAC_SECRET missing
-    # Development: Uses fallback secret with warning
-  end
-end
-```
-
-**Key Features:**
-
-- Automatic loading from `HMAC_SECRET` environment variable
-- Production mode: Raises `ConfigurationError` if secret missing
-- Development mode: Logs warning and uses fallback
-- Deletes secret from ENV after loading (security)
-- Configurable production detection and error messages
-- Public methods: `production?`, `validate_secrets!`
-
-**Configuration Options:**
-
-- `hmac_secret_env_key` - Environment variable name (default: `'HMAC_SECRET'`)
-- `production_env_check` - Proc or boolean for production detection
-- `validate_secrets_on_configure?` - Enable/disable validation (default: `true`)
-- `development_hmac_secret_fallback` - Fallback secret for development
-- `hmac_secret_missing_error` - Error message for production
-- `hmac_secret_dev_warning` - Warning message for development
-
-**Documentation:** [docs/features/hmac-secret-guard.md](docs/features/hmac-secret-guard.md)
-
-### 2. JWT Secret Guard Feature
-
-Automatically configure and validate JWT secrets at application startup to prevent deployment errors.
+Validates that required database tables exist for enabled Rodauth features.
 
 ```ruby
 class RodauthApp < Roda
   plugin :rodauth do
-    enable :jwt_secret_guard
+    enable :login, :logout, :otp
+    enable :table_guard  # ← Add this
 
-    # Production: Raises error if JWT_SECRET missing
-    # Development: Uses fallback secret with warning
+    table_guard_mode :raise  # or :warn, :error, :halt, :silent
   end
 end
 ```
 
-**Key Features:**
+**Modes:**
 
-- Automatic loading from `JWT_SECRET` environment variable
-- Production mode: Raises `ConfigurationError` if secret missing
-- Development mode: Logs warning and uses fallback
-- Deletes secret from ENV after loading (security)
-- Configurable production detection and error messages
-- Public methods: `production?`, `validate_secrets!`
-- Defines `jwt_secret` method for standalone use (no JWT feature required)
+- `:silent` / `:skip` / `nil` - Disable validation (debug log only)
+- `:warn` - Log warning message and continue execution
+- `:error` - Print distinctive message to error log but continue execution
+- `:raise` - Log error and raise `Rodauth::ConfigurationError` (recommended for production)
+- `:halt` / `:exit` - Log error and exit the process immediately
+- Block - Custom handler (see docs)
 
-**Configuration Options:**
+**Introspection:**
 
-- `jwt_secret_env_key` - Environment variable name (default: `'JWT_SECRET'`)
-- `production_env_check` - Proc or boolean for production detection
-- `validate_secrets_on_configure?` - Enable/disable validation (default: `true`)
-- `development_jwt_secret_fallback` - Fallback secret for development
-- `jwt_secret_missing_error` - Error message for production
-- `jwt_secret_dev_warning` - Warning message for development
+```ruby
+rodauth = MyApp.rodauth
 
-**Documentation:** [docs/features/jwt-secret-guard.md](docs/features/jwt-secret-guard.md)
+# List all required tables
+rodauth.list_all_required_tables
+# => [:accounts, :account_password_hashes, :account_otp_keys, ...]
 
-### 3. External Identity Feature
+# Check status of each table
+rodauth.table_status
+# => [{method: :accounts_table, table: :accounts, exists: true}, ...]
+
+# Get missing tables
+rodauth.missing_tables
+# => [{method: :otp_keys_table, table: :account_otp_keys}, ...]
+```
+
+**Documentation:** [docs/features/table-guard.md](docs/features/table-guard.md)
+
+### 2. External Identity Feature
 
 Store external service identifiers in your accounts table with automatic helper methods.
 
@@ -142,60 +146,55 @@ rodauth.elasticsearch_doc_id # => "doc_789xyz"
 
 **Documentation:** [docs/features/external-identity.md](docs/features/external-identity.md)
 
-### 4. Table Guard External Feature
+### 3. HMAC Secret Guard Feature
 
-Validates that required database tables exist for enabled Rodauth features.
+Automatically configure and validate HMAC secrets at application startup to prevent deployment errors.
 
 ```ruby
 class RodauthApp < Roda
   plugin :rodauth do
-    enable :login, :logout, :otp
-    enable :table_guard  # ← Add this
+    enable :hmac_secret_guard
 
-    table_guard_mode :raise  # or :warn, :error, :halt, :silent
+    # Production: Raises error if HMAC_SECRET missing
+    # Development: Uses fallback secret with warning
   end
 end
 ```
 
-**Modes:**
+**Key Features:**
 
-- `:silent` / `:skip` / `nil` - Disable validation (debug log only)
-- `:warn` - Log warning message and continue execution
-- `:error` - Print distinctive message to error log but continue execution
-- `:raise` - Log error and raise `Rodauth::ConfigurationError` (recommended for production)
-- `:halt` / `:exit` - Log error and exit the process immediately
-- Block - Custom handler (see below)
+- Automatic loading from `HMAC_SECRET` environment variable
+- Production mode: Raises `ConfigurationError` if secret missing
+- Development mode: Logs warning and uses fallback
+- Deletes secret from ENV after loading (security)
+- Configurable production detection and error messages
 
-**Custom Handlers:**
+**Documentation:** [docs/features/hmac-secret-guard.md](docs/features/hmac-secret-guard.md)
+
+### 4. JWT Secret Guard Feature
+
+Automatically configure and validate JWT secrets at application startup to prevent deployment errors.
 
 ```ruby
-table_guard_mode do |missing|
-  if Rails.env.production?
-    Slack.notify("Missing tables: #{missing.map { |t| t[:table] }.join(', ')}")
-    :raise  # Raise error
-  else
-    :continue  # Just log and continue
+class RodauthApp < Roda
+  plugin :rodauth do
+    enable :jwt_secret_guard
+
+    # Production: Raises error if JWT_SECRET missing
+    # Development: Uses fallback secret with warning
   end
 end
 ```
 
-**Introspection:**
+**Key Features:**
 
-```ruby
-rodauth = MyApp.rodauth
+- Automatic loading from `JWT_SECRET` environment variable
+- Production mode: Raises `ConfigurationError` if secret missing
+- Development mode: Logs warning and uses fallback
+- Deletes secret from ENV after loading (security)
+- Defines `jwt_secret` method for standalone use (no JWT feature required)
 
-# List all required tables
-rodauth.list_all_required_tables
-# => [:accounts, :account_password_hashes, :account_otp_keys, ...]
-
-# Check status of each table
-rodauth.table_status
-# => [{method: :accounts_table, table: :accounts, exists: true}, ...]
-
-# Get missing tables
-rodauth.missing_tables
-# => [{method: :otp_keys_table, table: :account_otp_keys}, ...]
-```
+**Documentation:** [docs/features/jwt-secret-guard.md](docs/features/jwt-secret-guard.md)
 
 ### 5. Sequel Migration Generator
 
@@ -286,16 +285,17 @@ bin/console
 - A framework adapter (use rodauth-rails for Rails)
 - A replacement for Rodauth itself
 - Published as a gem (it's a learning/reference project)
+- Production-ready gem (use features as reference implementations)
 
 ## Documentation
 
+- **[Table Guard Feature](docs/features/table-guard.md)** - Validate required database tables
+- **[External Identity Feature](docs/features/external-identity.md)** - Track external service identifiers
 - **[HMAC Secret Guard Feature](docs/features/hmac-secret-guard.md)** - Validate HMAC secrets at startup
 - **[JWT Secret Guard Feature](docs/features/jwt-secret-guard.md)** - Validate JWT secrets at startup
-- **[External Identity Feature](docs/features/external-identity.md)** - Track external service identifiers
-- **[Table Guard Feature](docs/features/table-guard.md)** - Validate required database tables
 - **[Sequel Migrations](docs/sequel-migrations.md)** - Integrating table_guard with Sequel migrations
 - **[Rodauth Feature API](docs/rodauth-features-api.md)** - Complete DSL reference for feature development
-- **[Rodauth Internals](docs/references/rodauth-internals.rdoc)** - Object model and metaprogramming patterns
+- **[Rodauth Integration](docs/rodauth-integration.md)** - Framework integration patterns
 - **[Mail Configuration](docs/rodauth-mail.md)** - Email and SMTP setup
 
 ## Related Projects
