@@ -25,7 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Broken link from `docs/integration.md` to `docs/rodauth-integration.md`
 - Missing context about project purpose and use cases
 
-## [0.1.0] - 2025-10
+## [0.1.0] - 2025-10-15
 
 ### Added
 - Table Guard feature for database table validation
