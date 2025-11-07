@@ -93,11 +93,7 @@ module Rodauth
 
       # Return early if secret is present
       return unless current_secret.nil? || (current_secret.respond_to?(:empty?) && current_secret.empty?)
-
-      if production?
-        # In production, raise an error
-        raise Rodauth::ConfigurationError, jwt_secret_missing_error
-      end
+      raise Rodauth::ConfigurationError, jwt_secret_missing_error if production?
 
       # In development, warn and set a fallback
       warn_dev_secret
