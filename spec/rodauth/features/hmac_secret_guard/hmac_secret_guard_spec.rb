@@ -1,4 +1,4 @@
-# frozen_string_literal: true
+# spec/rodauth/features/hmac_secret_guard/hmac_secret_guard_spec.rb
 
 require "spec_helper"
 require "sequel"

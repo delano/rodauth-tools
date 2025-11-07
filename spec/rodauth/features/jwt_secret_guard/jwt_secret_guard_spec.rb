@@ -1,4 +1,4 @@
-# frozen_string_literal: true
+# spec/rodauth/features/jwt_secret_guard/jwt_secret_guard_spec.rb
 
 require "spec_helper"
 require "sequel"

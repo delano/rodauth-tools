@@ -1,4 +1,4 @@
-# frozen_string_literal: true
+# lib/rodauth/tools/version.rb
 
 module Rodauth
   module Tools

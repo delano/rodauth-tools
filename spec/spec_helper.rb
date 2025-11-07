@@ -1,4 +1,4 @@
-# frozen_string_literal: true
+# spec/spec_helper.rb
 
 require "rodauth/tools"
 require "rack/test"

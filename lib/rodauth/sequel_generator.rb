@@ -1,4 +1,4 @@
-# frozen_string_literal: true
+# lib/rodauth/sequel_generator.rb
 
 require_relative "table_inspector"
 require_relative "template_inspector"

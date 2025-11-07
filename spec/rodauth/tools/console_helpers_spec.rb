@@ -1,4 +1,4 @@
-# frozen_string_literal: true
+# spec/rodauth/tools/console_helpers_spec.rb
 
 require 'spec_helper'
 

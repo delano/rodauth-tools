@@ -1,4 +1,4 @@
-# frozen_string_literal: true
+# spec/rodauth/rack_spec.rb
 
 RSpec.describe Rodauth::Tools do
   it "has a version number" do

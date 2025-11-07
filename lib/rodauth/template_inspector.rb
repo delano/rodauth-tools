@@ -1,4 +1,4 @@
-# frozen_string_literal: true
+# lib/rodauth/template_inspector.rb
 
 require 'erb'
 require 'dry/inflector'
