@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Framework-agnostic utilities for Rodauth authentication:
 
-1. **External Rodauth Features** - `table_guard` for database validation, `external_identity` for external service IDs, `hmac_secret_guard` for HMAC secret validation
+1. **External Rodauth Features** - `table_guard` for database validation, `external_identity` for external service IDs, `hmac_secret_guard` for HMAC secret validation, `jwt_secret_guard` for JWT secret validation
 2. **Sequel Migration Generator** - Generate migrations for 19 Rodauth features
 
 **Not a framework adapter.** For Rails integration, use rodauth-rails. This project demonstrates Rodauth's extensibility and provides reference implementations.
@@ -46,6 +46,17 @@ bin/console
 - Development mode: Logs warning and uses configurable fallback secret
 - Deletes secret from ENV after loading for security
 - Provides `production?` and `validate_secrets!` public methods
+
+**lib/rodauth/features/jwt_secret_guard.rb** - External Rodauth feature
+
+- Uses `Rodauth::Feature.define(:jwt_secret_guard, :JwtSecretGuard)` pattern
+- Automatically loads JWT secret from environment variable (defaults to `JWT_SECRET`)
+- Validates secret is configured at application startup via `post_configure` hook
+- Production mode: Raises `ConfigurationError` if secret missing
+- Development mode: Logs warning and uses configurable fallback secret
+- Deletes secret from ENV after loading for security
+- Provides `production?` and `validate_secrets!` public methods
+- Defines `jwt_secret` configuration method for standalone use
 
 **lib/rodauth/tools/migration.rb** - Sequel migration generator
 
