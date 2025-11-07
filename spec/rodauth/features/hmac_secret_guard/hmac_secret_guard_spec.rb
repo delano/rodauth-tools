@@ -1,3 +1,5 @@
+# spec/rodauth/features/hmac_secret_guard/hmac_secret_guard_spec.rb
+#
 # frozen_string_literal: true
 
 require "spec_helper"

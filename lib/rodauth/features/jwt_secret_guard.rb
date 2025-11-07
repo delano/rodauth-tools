@@ -1,4 +1,6 @@
 # lib/rodauth/features/jwt_secret_guard.rb
+#
+# frozen_string_literal: true
 
 module Rodauth
   # Automatically sets jwt_secret based on JWT_SECRET and validates it is properly

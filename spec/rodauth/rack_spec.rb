@@ -1,3 +1,5 @@
+# spec/rodauth/rack_spec.rb
+#
 # frozen_string_literal: true
 
 RSpec.describe Rodauth::Tools do

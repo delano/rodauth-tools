@@ -1,4 +1,6 @@
 #!/usr/bin/env ruby
+# examples/migration_logger_demo.rb
+#
 # frozen_string_literal: true
 
 # Demonstration of logger suppression during migrations

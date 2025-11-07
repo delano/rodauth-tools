@@ -1,3 +1,5 @@
+# examples/sinatra-table-guard/app.rb
+#
 # frozen_string_literal: true
 
 # Barebones Sinatra app demonstrating table_guard feature

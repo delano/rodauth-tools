@@ -1,3 +1,5 @@
+# spec/rodauth/table_inspector_spec.rb
+#
 # frozen_string_literal: true
 
 require "spec_helper"

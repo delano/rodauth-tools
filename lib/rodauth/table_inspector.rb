@@ -1,3 +1,5 @@
+# lib/rodauth/table_inspector.rb
+#
 # frozen_string_literal: true
 
 module Rodauth

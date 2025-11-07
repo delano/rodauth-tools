@@ -1,4 +1,6 @@
 #!/usr/bin/env ruby
+# examples/sinatra-table-guard/console.rb
+#
 # frozen_string_literal: true
 
 # Console helper for table_guard demo

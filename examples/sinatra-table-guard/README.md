@@ -53,11 +53,40 @@ end
 
 ## What You'll See
 
-```plain
-[10:30:45] ERROR CRITICAL: Missing Rodauth tables - accounts, account_verification_keys, account_otp_keys
+### With `:warn` Mode (Default)
 
-Migration hints:
-  table_guard_sequel_mode :create     # Create tables now
+```
+[10:30:45] WARN  Missing required database tables
+[10:30:45] WARN  - accounts (feature: base, method: accounts_table)
+[10:30:45] WARN  - account_password_hashes (feature: base, method: account_password_hashes_table)
+[10:30:45] WARN  - account_verification_keys (feature: verify_account, method: verify_account_table)
+[10:30:45] WARN
+[10:30:45] WARN  💡 Migration hints:
+[10:30:45] WARN    table_guard_sequel_mode :create     # Create tables now
+[10:30:45] WARN    table_guard_sequel_mode :log        # Output migration code
+[10:30:45] WARN    table_guard_sequel_mode :migration  # Generate migration file
+```
+
+### With `:create` Mode (Auto-create)
+
+```
+[10:30:45] WARN  Missing required database tables
+[10:30:45] INFO  Creating 3 missing tables...
+[10:30:45] INFO  ✓ Created table: accounts
+[10:30:45] INFO  ✓ Created table: account_password_hashes
+[10:30:45] INFO  ✓ Created table: account_verification_keys
+[10:30:45] INFO  Successfully created all missing tables
+```
+
+### With `:raise` Mode (Production)
+
+```
+[10:30:45] ERROR CRITICAL: Missing Rodauth tables detected!
+[10:30:45] ERROR - accounts (feature: base)
+[10:30:45] ERROR - account_password_hashes (feature: base)
+[10:30:45] ERROR
+[10:30:45] ERROR This application cannot start without required database tables.
+/path/to/app.rb:42:in `block': Missing required database tables! (Rodauth::ConfigurationError)
 ```
 
 ## Database

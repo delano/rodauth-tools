@@ -1,4 +1,6 @@
 # lib/rodauth/features/hmac_secret_guard.rb
+#
+# frozen_string_literal: true
 
 module Rodauth
   # Automatically sets hmac_secret based on HMAC_SECRET and validates it is properly

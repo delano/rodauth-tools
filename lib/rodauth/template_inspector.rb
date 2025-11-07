@@ -1,3 +1,5 @@
+# lib/rodauth/template_inspector.rb
+#
 # frozen_string_literal: true
 
 require 'erb'

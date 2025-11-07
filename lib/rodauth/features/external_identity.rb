@@ -1,6 +1,6 @@
-# frozen_string_literal: true
-
 # lib/rodauth/features/external_identity.rb
+#
+# frozen_string_literal: true
 
 #
 # Enable with:

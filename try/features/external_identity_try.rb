@@ -1,6 +1,7 @@
-# frozen_string_literal: true
 # try/features/external_identity_try.rb
 #
+# frozen_string_literal: true
+
 # Tryouts v3 tests for external_identity Rodauth feature
 #
 # Run with:

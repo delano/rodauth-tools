@@ -1,3 +1,5 @@
+# lib/rodauth/tools/console_helpers.rb
+#
 # frozen_string_literal: true
 
 module Rodauth

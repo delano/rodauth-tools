@@ -1,3 +1,5 @@
+# spec/rodauth/features/jwt_secret_guard/jwt_secret_guard_spec.rb
+#
 # frozen_string_literal: true
 
 require "spec_helper"
