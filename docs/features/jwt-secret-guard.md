@@ -559,8 +559,8 @@ plugin :rodauth do
   enable :jwt_secret_guard
 
   # Override validate_secrets! to add custom checks
-  validate_secrets! do
-    super() # Call the original validation
+  def validate_secrets!
+    super # Call the original validation
 
     secret = jwt_secret
 
