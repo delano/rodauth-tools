@@ -1,4 +1,6 @@
 # spec/rodauth/features/table_guard/table_guard_simple_spec.rb
+#
+# frozen_string_literal: true
 
 require "spec_helper"
 require "sequel"

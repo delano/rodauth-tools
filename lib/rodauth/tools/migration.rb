@@ -1,5 +1,7 @@
-# frozen_string_literal: true
 # lib/rodauth/tools/migration.rb
+#
+# frozen_string_literal: true
+
 require 'erb'
 require 'dry/inflector'
 

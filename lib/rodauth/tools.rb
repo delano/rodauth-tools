@@ -1,4 +1,6 @@
 # lib/rodauth/tools.rb
+#
+# frozen_string_literal: true
 
 # Rodauth must be loaded before our external features can be defined
 begin

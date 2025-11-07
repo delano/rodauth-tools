@@ -1,4 +1,6 @@
 # lib/rodauth/table_inspector.rb
+#
+# frozen_string_literal: true
 
 module Rodauth
   # TableInspector dynamically discovers database tables required by enabled Rodauth features.

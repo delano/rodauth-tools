@@ -1,4 +1,6 @@
 # spec/rodauth/features/external_identity_autocreate_integration_spec.rb
+#
+# frozen_string_literal: true
 
 require "spec_helper"
 require "sequel"

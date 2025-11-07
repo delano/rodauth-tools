@@ -1,4 +1,6 @@
 # spec/rodauth/sequel_generator_spec.rb
+#
+# frozen_string_literal: true
 
 require "spec_helper"
 
