@@ -282,8 +282,8 @@ GEM
     sequel-activerecord_connection (2.0.1)
       activerecord (>= 5.1)
       sequel (~> 5.38)
-    sqlite3 (2.7.4-arm64-darwin)
-    sqlite3 (2.7.4-x86_64-linux-gnu)
+    sqlite3 (2.8.0-arm64-darwin)
+    sqlite3 (2.8.0-x86_64-linux-gnu)
     stringio (3.1.7)
     thor (1.4.0)
     tilt (2.6.1)
@@ -351,7 +351,7 @@ DEPENDENCIES
   rubocop-rake
   rubocop-rspec
   sequel-activerecord_connection (~> 2.0)
-  sqlite3 (~> 2.0)
+  sqlite3 (~> 2.8)
   tilt (~> 2.4)
   tryouts (~> 3.0)
   warning
