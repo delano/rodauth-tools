@@ -270,16 +270,35 @@ bin/console
 
 ## Architecture
 
-**What this project is:**
+```plain
+                    ┌─────────────────────────┐
+                    │        Rodauth          │  ← the real work
+                    │  (jeremyevans/rodauth)  │
+                    └───────────┬─────────────┘
+                                │
+        ┌───────────────────────┼───────────────────────┐
+        │                       │                       │
+        ▼                       ▼                       ▼
+  rodauth-rails          rodauth-tools            your own
+  (janko)                (this gem)               features
+        │                       │
+        │               ┌───────┴───────┐
+        │               │               │
+        │            features      migrations
+        │               │               │
+        │          table_guard     sequel templates (based on rodauth-rails)
+        │          external_identity
+        │          *_secret_guard
+        │
+        └───────────────┬───────────────┘
+                        │
+                        ▼
+                  Your Rack app
+```
 
-- Collection of framework-agnostic Rodauth utilities
-- External Rodauth features (using `Rodauth::Feature.define`)
-- Migration generators for Sequel ORM
+**Rodauth Feature Architecture:**
 
-**What this project is NOT:**
-
-- A framework adapter (use rodauth-rails for Rails)
-- A replacement for Rodauth itself
+Rodauth Features are modules that mix into `Rodauth::Auth` instances at runtime. They use lifecycle hooks like `post_configure` for initialization and `auth_value_method` for user-overridable settings. See [docs/rodauth-features-api.md](docs/rodauth-features-api.md) for a DSL reference.
 
 ## Documentation
 
@@ -300,9 +319,9 @@ bin/console
 
 ## AI Development Assistance
 
-Version 1.2.0's security features were developed with AI assistance:
+Version 0.3.0's features were developed with AI assistance:
 
-- **Zed Agent (Claude Sonnet 4)**
+- **Zed Agent (Claude Sonnet 4)** - Core feature implementation: Secret Guards, Table Guard, and Migrations
 - **Gemini 3 Pro** - Release readiness assessment
 - **GitHub Copilot** - Code completion
 
