@@ -158,6 +158,8 @@ GEM
     nio4r (2.7.5)
     nokogiri (1.18.10-arm64-darwin)
       racc (~> 1.4)
+    nokogiri (1.18.10-x86_64-linux-gnu)
+      racc (~> 1.4)
     openssl (3.3.1)
     openssl-signature_algorithm (1.3.0)
       openssl (> 2.0)
@@ -276,6 +278,7 @@ GEM
       activerecord (>= 5.1)
       sequel (~> 5.38)
     sqlite3 (2.8.0-arm64-darwin)
+    sqlite3 (2.8.0-x86_64-linux-gnu)
     stringio (3.1.7)
     thor (1.4.0)
     tilt (2.6.1)
@@ -323,6 +326,7 @@ GEM
 
 PLATFORMS
   arm64-darwin-25
+  x86_64-linux
 
 DEPENDENCIES
   bcrypt (~> 3.1)
