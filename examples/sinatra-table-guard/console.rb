@@ -12,8 +12,8 @@
 #   load 'examples/sinatra-table-guard/console.rb'
 
 require 'stringio'
-require_relative "app"
-require "rodauth/tools/console_helpers"
+require_relative 'app'
+require 'rodauth/tools/console_helpers'
 
 # Console context module that provides rodauth instance access
 module ConsoleContext
@@ -46,26 +46,26 @@ module ConsoleContext
 end
 
 # Make console helpers available at top level
-def rodauth; ConsoleContext.rodauth; end
-def config; ConsoleContext.config; end
-def missing; ConsoleContext.missing; end
-def tables; ConsoleContext.tables; end
-def status; ConsoleContext.status; end
-def db; ConsoleContext.db; end
-def show_config; ConsoleContext.show_config; end
-def show_missing; ConsoleContext.show_missing; end
-def show_status; ConsoleContext.show_status; end
-def create_tables!; ConsoleContext.create_tables!; end
-def show_migration; ConsoleContext.show_migration; end
-def help; ConsoleContext.help; end
+def rodauth = ConsoleContext.rodauth
+def config = ConsoleContext.config
+def missing = ConsoleContext.missing
+def tables = ConsoleContext.tables
+def status = ConsoleContext.status
+def db = ConsoleContext.db
+def show_config = ConsoleContext.show_config
+def show_missing = ConsoleContext.show_missing
+def show_status = ConsoleContext.show_status
+def create_tables! = ConsoleContext.create_tables!
+def show_migration = ConsoleContext.show_migration
+def help = ConsoleContext.help
 
 # Start console if run directly
 if __FILE__ == $PROGRAM_NAME
-  require "irb"
+  require 'irb'
 
-  puts "\n" + "=" * 70
-  puts "🚀 Rodauth table_guard Console"
-  puts "=" * 70
+  puts "\n" + ('=' * 70)
+  puts '🚀 Rodauth table_guard Console'
+  puts '=' * 70
 
   # Show the help from console helpers
   # help

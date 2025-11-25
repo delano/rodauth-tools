@@ -2,13 +2,6 @@
 
 Framework-agnostic utilities for [Rodauth](http://rodauth.jeremyevans.net) authentication. Provides external Rodauth features and Sequel migration generators.
 
-> [!WARNING]
-> **Development Status**: This is an experimental learning/reference project.
-> - ✅ Features are functional and tested
-> - ⚠️  APIs may change without notice
-> - 🚫 Not published to RubyGems (clone and use locally)
-> - 💡 Intended as reference implementation for Rodauth extensibility
-
 ## Quick Start
 
 ```ruby
@@ -33,29 +26,32 @@ end
 
 Rodauth::Tools provides utilities that work with any Rodauth setup, regardless of framework:
 
-1. **External Rodauth Features** - Like `table_guard` for validating database table setup
-2. **Sequel Migration Generator** - Generate Rodauth database migrations for 19 features
+1. **External Rodauth Features** - Like `table_guard` for validating database table setup, `external_identity` for tracking external IDs, and secret guards.
+2. **Sequel Migration Generator** - Generate Rodauth database migrations for 19 features.
 
-This is NOT a framework adapter. For framework integration, use:
+This is NOT a framework adapter. It is a collection of tools extracted from framework integrations to be used in any Rodauth environment. For specific framework integration, use:
 
 - Rails: [rodauth-rails](https://github.com/janko/rodauth-rails)
 - Others: Integrate Rodauth directly - [see integration guide](docs/rodauth-integration.md)
 
 ## Installation
 
-This project is not published as a gem. To use it:
+Add this line to your application's Gemfile:
+
+```ruby
+gem 'rodauth-tools'
+```
+
+And then execute:
 
 ```bash
-# Option 1: Clone and reference locally
-git clone https://github.com/delano/rodauth-tools
-cd rodauth-tools
 bundle install
+```
 
-# Option 2: Add as git dependency (Gemfile)
-gem 'rodauth-tools', git: 'https://github.com/delano/rodauth-tools'
+Or install it yourself as:
 
-# Option 3: Copy individual features into your project
-# Features in lib/rodauth/features/ are self-contained
+```bash
+gem install rodauth-tools
 ```
 
 ## Features
@@ -274,18 +270,35 @@ bin/console
 
 ## Architecture
 
-**What this project is:**
+```plain
+                    ┌─────────────────────────┐
+                    │        Rodauth          │  ← the real work
+                    │  (jeremyevans/rodauth)  │
+                    └───────────┬─────────────┘
+                                │
+        ┌───────────────────────┼───────────────────────┐
+        │                       │                       │
+        ▼                       ▼                       ▼
+  rodauth-rails          rodauth-tools            your own
+  (janko)                (this gem)               features
+        │                       │
+        │               ┌───────┴───────┐
+        │               │               │
+        │            features      migrations
+        │               │               │
+        │          table_guard     sequel templates (based on rodauth-rails)
+        │          external_identity
+        │          *_secret_guard
+        │
+        └───────────────┬───────────────┘
+                        │
+                        ▼
+                  Your Rack app
+```
 
-- Collection of framework-agnostic Rodauth utilities
-- External Rodauth features (using `Rodauth::Feature.define`)
-- Migration generators for Sequel ORM
+**Rodauth Feature Architecture:**
 
-**What this project is NOT:**
-
-- A framework adapter (use rodauth-rails for Rails)
-- A replacement for Rodauth itself
-- Published as a gem (it's a learning/reference project)
-- Production-ready gem (use features as reference implementations)
+Rodauth Features are modules that mix into `Rodauth::Auth` instances at runtime. They use lifecycle hooks like `post_configure` for initialization and `auth_value_method` for user-overridable settings. See [docs/rodauth-features-api.md](docs/rodauth-features-api.md) for a DSL reference.
 
 ## Documentation
 
@@ -304,10 +317,22 @@ bin/console
 - [rodauth-rails](https://github.com/janko/rodauth-rails) - Rails integration
 - [roda](https://github.com/jeremyevans/roda) - Routing tree web toolkit
 
+## AI Development Assistance
+
+Version 0.3.0's features were developed with AI assistance:
+
+- **Zed Agent (Claude Sonnet 4)** - Core feature implementation: Secret Guards, Table Guard, and Migrations
+- **Gemini 3 Pro** - Release readiness assessment
+- **GitHub Copilot** - Code completion
+
+The maintainer remains responsible for all security decisions and implementation. We believe in transparency about development tools, especially for security-focused software.
+
 ## Acknowledgments
 
-- **Migration Templates**: Copied from [rodauth-rails](https://github.com/janko/rodauth-rails) by Janko Marohnić
-- **Inspiration**: rodauth-rails' excellent Rails integration
+This project originated as an effort to bring some of the excellent developer experience of [rodauth-rails](https://github.com/janko/rodauth-rails) to non-Rails environments. It started as a rack adapter (`rodauth-rack`) but was eventually distilled into this collection of framework-agnostic tools.
+
+- **Migration Templates**: Heavily borrowed from [rodauth-rails](https://github.com/janko/rodauth-rails) by Janko Marohnić.
+- **Inspiration**: The `rodauth-rails` project demonstrated how much easier Rodauth configuration could be with the right tooling.
 
 ## License
 

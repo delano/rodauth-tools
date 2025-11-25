@@ -34,7 +34,7 @@ module Rodauth
       # Evaluate ERB template
       begin
         rendered = ERB.new(template_content, trim_mode: '-').result(context.get_binding)
-      rescue => e
+      rescue StandardError => e
         warn "Failed to evaluate template for #{feature}: #{e.message}"
         return []
       end
@@ -116,16 +116,16 @@ module Rodauth
 
         def supports_partial_indexes?
           # PostgreSQL and SQLite support partial indexes
-          [:postgres, :sqlite].include?(@database_type)
+          %i[postgres sqlite].include?(@database_type)
         end
 
         # Stub other methods that might be called in templates
-        def method_missing(method, *args, &block)
+        def method_missing(_method, *_args)
           # Return a safe default for unknown methods
           nil
         end
 
-        def respond_to_missing?(method, include_private = false)
+        def respond_to_missing?(_method, _include_private = false)
           true
         end
       end

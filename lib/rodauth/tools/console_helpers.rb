@@ -18,9 +18,7 @@ module Rodauth
       #
       # Override this method in your console script to provide the actual instance
       def rodauth
-        @rodauth ||= begin
-          raise NotImplementedError, 'You must define a `rodauth` method that returns a Rodauth instance'
-        end
+        @rodauth ||= raise NotImplementedError, 'You must define a `rodauth` method that returns a Rodauth instance'
       end
 
       # Get discovered table configuration

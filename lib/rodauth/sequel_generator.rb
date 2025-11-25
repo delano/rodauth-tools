@@ -2,8 +2,8 @@
 #
 # frozen_string_literal: true
 
-require_relative "table_inspector"
-require_relative "template_inspector"
+require_relative 'table_inspector'
+require_relative 'template_inspector'
 
 module Rodauth
   # SequelGenerator generates Sequel migration code for missing Rodauth tables.
@@ -50,7 +50,7 @@ module Rodauth
                             # Generate the migration content
                             migration.generate
                           else
-                            ""
+                            ''
                           end
 
       # Generate ALTER TABLE statements for missing columns
@@ -116,7 +116,7 @@ module Rodauth
     #
     # @return [String] Sequel DROP TABLE code
     def generate_drop_statements
-      return "" if missing_tables.empty?
+      return '' if missing_tables.empty?
 
       # Extract all tables from ERB templates (not just discovered methods)
       all_tables = extract_all_tables_from_templates
@@ -139,7 +139,7 @@ module Rodauth
     #
     # @return [String] Sequel ALTER TABLE code
     def generate_alter_table_statements
-      return "" if missing_columns.empty?
+      return '' if missing_columns.empty?
 
       # Group columns by table
       columns_by_table = missing_columns.group_by { |col| col[:table] }
@@ -156,21 +156,21 @@ module Rodauth
           options = []
           options << "null: #{col[:null]}" unless col[:null].nil?
           options << "default: #{format_default_value(col[:default])}" if col[:default]
-          options << "unique: true" if col[:unique]
+          options << 'unique: true' if col[:unique]
           options << "size: #{col[:size]}" if col[:size]
 
-          options_str = options.empty? ? "" : ", #{options.join(', ')}"
+          options_str = options.empty? ? '' : ", #{options.join(", ")}"
 
           alter_block << "  add_column :#{col[:column]}, #{column_type}#{options_str}"
 
           # Add index if requested
           if col[:index]
-            index_opts = col[:unique] ? ", unique: true" : ""
+            index_opts = col[:unique] ? ', unique: true' : ''
             alter_block << "  add_index :#{col[:column]}#{index_opts}"
           end
         end
 
-        alter_block << "end"
+        alter_block << 'end'
         alter_block.join("\n")
       end
 
@@ -181,7 +181,7 @@ module Rodauth
     #
     # @return [String] Sequel DROP COLUMN code
     def generate_drop_column_statements
-      return "" if missing_columns.empty?
+      return '' if missing_columns.empty?
 
       # Group columns by table
       columns_by_table = missing_columns.group_by { |col| col[:table] }
@@ -194,7 +194,7 @@ module Rodauth
           alter_block << "  drop_column :#{col[:column]}"
         end
 
-        alter_block << "end"
+        alter_block << 'end'
         alter_block.join("\n")
       end
 
@@ -215,7 +215,7 @@ module Rodauth
 
         begin
           migration.execute_create_tables(db)
-        rescue => e
+        rescue StandardError => e
           raise "Failed to execute table creation: #{e.class} - #{e.message}\n  #{e.backtrace.first(5).join("\n  ")}"
         end
       end
@@ -287,8 +287,8 @@ module Rodauth
       features = missing_tables.map { |t| t[:feature] }.compact.uniq
 
       # Ensure :base feature is included if accounts table is missing
-      if missing_tables.any? { |t| t[:table].to_s.match?(/^accounts?$/) }
-        features.unshift(:base) unless features.include?(:base)
+      if missing_tables.any? { |t| t[:table].to_s.match?(/^accounts?$/) } && !features.include?(:base)
+        features.unshift(:base)
       end
 
       features
@@ -324,7 +324,7 @@ module Rodauth
       adapter = if db
                   db.database_type
                 else
-                  :postgres  # Default to PostgreSQL
+                  :postgres # Default to PostgreSQL
                 end
 
       Rodauth::Tools::Migration::MockSequelDatabase.new(adapter)
@@ -369,7 +369,7 @@ module Rodauth
       if db
         db.database_type
       else
-        :postgres  # Default
+        :postgres # Default
       end
     end
 
@@ -462,7 +462,7 @@ module Rodauth
     # @param spaces [Integer] Number of spaces
     # @return [String] Indented text
     def indent(text, spaces)
-      text.lines.map { |line| line.strip.empty? ? line : (" " * spaces) + line }.join
+      text.lines.map { |line| line.strip.empty? ? line : (' ' * spaces) + line }.join
     end
 
     # Format default value for Sequel migration code
@@ -474,8 +474,8 @@ module Rodauth
       when Symbol then value.inspect
       when String then value.inspect
       when Numeric, TrueClass, FalseClass then value.to_s
-      when nil then "nil"
-      when Proc then "-> { #{value.call} }"  # Evaluate proc for migration
+      when nil then 'nil'
+      when Proc then "-> { #{value.call} }" # Evaluate proc for migration
       else value.inspect
       end
     end
@@ -487,20 +487,20 @@ module Rodauth
     def map_column_type(type)
       # Handle both Symbol and Class forms
       # Note: Can't use case/when with Class constants directly, use equality checks
-      if type == String || type == :String || type == :Text
-        "String"
-      elsif type == Integer || type == :Integer
-        "Integer"
-      elsif type == :Bignum || type == :BigDecimal
-        "Bignum"
-      elsif type == TrueClass || type == FalseClass || type == :Boolean
-        "TrueClass"
-      elsif type == Date || type == :Date
-        "Date"
-      elsif type == DateTime || type == Time || type == :DateTime || type == :Time
-        "DateTime"
+      if [String, :String, :Text].include?(type)
+        'String'
+      elsif [Integer, :Integer].include?(type)
+        'Integer'
+      elsif %i[Bignum BigDecimal].include?(type)
+        'Bignum'
+      elsif [TrueClass, FalseClass, :Boolean].include?(type)
+        'TrueClass'
+      elsif [Date, :Date].include?(type)
+        'Date'
+      elsif [DateTime, Time, :DateTime, :Time].include?(type)
+        'DateTime'
       else
-        "String"  # Default to String for unknown types
+        'String' # Default to String for unknown types
       end
     end
 
@@ -511,20 +511,20 @@ module Rodauth
     def map_column_type_for_execution(type)
       # Handle both Symbol and Class forms
       # Note: Can't use case/when with Class constants directly, use equality checks
-      if type == String || type == :String || type == :Text
+      if [String, :String, :Text].include?(type)
         String
-      elsif type == Integer || type == :Integer
+      elsif [Integer, :Integer].include?(type)
         Integer
-      elsif type == :Bignum || type == :BigDecimal
+      elsif %i[Bignum BigDecimal].include?(type)
         :Bignum
-      elsif type == TrueClass || type == FalseClass || type == :Boolean
+      elsif [TrueClass, FalseClass, :Boolean].include?(type)
         TrueClass
-      elsif type == Date || type == :Date
+      elsif [Date, :Date].include?(type)
         Date
-      elsif type == DateTime || type == Time || type == :DateTime || type == :Time
+      elsif [DateTime, Time, :DateTime, :Time].include?(type)
         DateTime
       else
-        String  # Default to String for unknown types
+        String # Default to String for unknown types
       end
     end
   end

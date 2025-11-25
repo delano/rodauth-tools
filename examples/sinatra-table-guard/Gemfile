@@ -1,31 +1,31 @@
 # frozen_string_literal: true
 
-source "https://rubygems.org"
+source 'https://rubygems.org'
 
-gem "sinatra", "~> 4.0"
-gem "roda", "~> 3.0"
-gem "sequel", "~> 5.0"
-gem "rodauth", "~> 2.0"
-gem "bcrypt", "~> 3.1"
-gem "mail", "~> 2.8"  # Required for email-based features (verify_account, etc.)
+gem 'bcrypt', '~> 3.1'
+gem 'mail', '~> 2.8' # Required for email-based features (verify_account, etc.)
 gem 'rack-session'
+gem 'roda', '~> 3.0'
+gem 'rodauth', '~> 2.0'
+gem 'sequel', '~> 5.0'
+gem 'sinatra', '~> 4.0'
 
 # Or for Argon2 password hashing
 # gem "argon2", "~> 2.0"
 
 # Database adapter - uncomment your choice
-gem "sqlite3", "~> 1.7"
+gem 'sqlite3', '~> 1.7'
 # gem "pg", "~> 1.5"  # For PostgreSQL
 # gem "mysql2", "~> 0.5"  # For MySQL
 
 # Web server
-gem "puma", "~> 6.0"
+gem 'puma', '~> 6.0'
 
 # Development/debugging
 group :development do
-  gem "rackup"
-  gem "irb", "~> 1.8"
-  gem "pry", "~> 0.14"
+  gem 'irb', '~> 1.8'
+  gem 'pry', '~> 0.14'
+  gem 'rackup'
 end
 
 # Use local rodauth-tools if developing

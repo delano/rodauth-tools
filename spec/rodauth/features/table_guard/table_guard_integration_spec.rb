@@ -2,17 +2,17 @@
 #
 # frozen_string_literal: true
 
-require "spec_helper"
-require "sequel"
-require "rodauth"
-require "roda"
+require 'spec_helper'
+require 'sequel'
+require 'rodauth'
+require 'roda'
 
-RSpec.describe "TableGuard Integration" do
+RSpec.describe 'TableGuard Integration' do
   def create_all_tables(db)
     db.create_table :accounts do
       primary_key :id
       String :email, null: false
-      String :status_id, default: "unverified"
+      String :status_id, default: 'unverified'
     end
 
     db.create_table :account_password_hashes do
@@ -21,7 +21,7 @@ RSpec.describe "TableGuard Integration" do
     end
   end
 
-  it "raises error during configuration in raise mode" do
+  it 'raises error during configuration in raise mode' do
     db = Sequel.sqlite
 
     expect do
@@ -38,12 +38,12 @@ RSpec.describe "TableGuard Integration" do
         end
       end
     end.to raise_error(Rodauth::ConfigurationError) do |error|
-      expect(error.message).to include("Missing required database tables")
-      expect(error.message).to include("accounts")
+      expect(error.message).to include('Missing required database tables')
+      expect(error.message).to include('accounts')
     end
   end
 
-  it "works when all required tables exist" do
+  it 'works when all required tables exist' do
     db = Sequel.sqlite
     create_all_tables(db)
 
@@ -63,7 +63,7 @@ RSpec.describe "TableGuard Integration" do
     expect(app).not_to be_nil
   end
 
-  it "does not raise in silent mode" do
+  it 'does not raise in silent mode' do
     db = Sequel.sqlite
 
     app = Class.new(Roda) do
@@ -82,7 +82,7 @@ RSpec.describe "TableGuard Integration" do
     expect(app).not_to be_nil
   end
 
-  it "is disabled by default" do
+  it 'is disabled by default' do
     db = Sequel.sqlite
 
     app = Class.new(Roda) do
