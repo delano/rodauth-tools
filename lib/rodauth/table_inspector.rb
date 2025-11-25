@@ -28,17 +28,15 @@ module Rodauth
     # @param rodauth_instance [Rodauth::Auth] A Rodauth auth instance
     # @return [Hash<Symbol, String>] Map of method names to table names
     def self.discover_tables(rodauth_instance)
-      table_methods = rodauth_instance.methods.select { |m| m.to_s.end_with?("_table") }
+      table_methods = rodauth_instance.methods.select { |m| m.to_s.end_with?('_table') }
 
       tables = {}
       table_methods.each do |method|
-        begin
-          table_name = rodauth_instance.send(method)
-          tables[method] = table_name if table_name.is_a?(String) || table_name.is_a?(Symbol)
-        rescue StandardError => e
-          # Some table methods might fail if called without proper context
-          warn "TableInspector: Unable to call #{method}: #{e.message}" if ENV['RODAUTH_DEBUG']
-        end
+        table_name = rodauth_instance.send(method)
+        tables[method] = table_name if table_name.is_a?(String) || table_name.is_a?(Symbol)
+      rescue StandardError => e
+        # Some table methods might fail if called without proper context
+        warn "TableInspector: Unable to call #{method}: #{e.message}" if ENV['RODAUTH_DEBUG']
       end
 
       tables
@@ -99,14 +97,12 @@ module Rodauth
         next unless feature_module
 
         # Check if this feature module defines the table method
-        if feature_module.instance_methods(false).include?(method_name)
-          return feature_name
-        end
+        return feature_name if feature_module.instance_methods(false).include?(method_name)
       end
 
       # Fallback: try to infer from method name if not found in any feature
       # This handles edge cases where features might not be fully loaded
-      method_str = method_name.to_s.sub(/_table$/, "")
+      method_str = method_name.to_s.sub(/_table$/, '')
       method_str.to_sym
     end
 
@@ -118,12 +114,11 @@ module Rodauth
     # @param method_name [Symbol] The table method name
     # @param table_name [String, Symbol] The actual table name
     # @return [Hash] Table structure metadata (minimal, for compatibility)
-    def self.infer_table_structure(method_name, table_name)
+    def self.infer_table_structure(_method_name, _table_name)
       # Return minimal structure - the actual schema is in ERB templates
       {
         type: :feature
       }
     end
-
   end
 end

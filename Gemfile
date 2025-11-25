@@ -6,9 +6,9 @@ source 'https://rubygems.org'
 
 gemspec
 
+gem 'dry-inflector'
 gem 'irb'
 gem 'rake', '~> 13.3'
-gem 'dry-inflector'
 
 group :development do
   gem 'bundler-audit'

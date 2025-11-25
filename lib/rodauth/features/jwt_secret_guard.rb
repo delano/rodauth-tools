@@ -49,7 +49,8 @@ module Rodauth
     auth_value_method :jwt_secret_env_key, 'JWT_SECRET'
     auth_value_method :production_env_check, proc { ENV.fetch('RACK_ENV', 'production') == 'production' }
     auth_value_method :validate_secrets_on_configure?, true
-    auth_value_method :development_jwt_secret_fallback, 'dev-only-insecure-example-jwt-secret-needs-to-be-changed-in-prod'
+    auth_value_method :development_jwt_secret_fallback,
+                      'dev-only-insecure-example-jwt-secret-needs-to-be-changed-in-prod'
 
     # Make jwt_secret configurable (if not already provided by jwt feature)
     auth_value_method :jwt_secret, nil

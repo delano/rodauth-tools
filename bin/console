@@ -1,14 +1,14 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-require "bundler/setup"
-require "sequel"
-require "rodauth"
-require "roda"
-require "irb"
+require 'bundler/setup'
+require 'sequel'
+require 'rodauth'
+require 'roda'
+require 'irb'
 
 # Load rodauth-tools
-require_relative "../lib/rodauth/tools"
+require_relative '../lib/rodauth/tools'
 
 puts "\n=== Rodauth::Tools Console ==="
 puts "Utilities for Rodauth: table_guard feature + Sequel migration generator\n"
@@ -21,7 +21,7 @@ def setup_test_db
   db.create_table :accounts do
     primary_key :id
     String :email, null: false, unique: true
-    String :status_id, default: "unverified"
+    String :status_id, default: 'unverified'
   end
 
   # Create password hash table
@@ -30,12 +30,12 @@ def setup_test_db
     String :password_hash, null: false
   end
 
-  puts "✓ Created test database with accounts and account_password_hashes tables"
+  puts '✓ Created test database with accounts and account_password_hashes tables'
   db
 end
 
 # Helper to create a Roda app with Rodauth
-def create_app(db, features: [:login, :logout], table_guard_mode: nil)
+def create_app(db, features: %i[login logout], table_guard_mode: nil)
   Class.new(Roda) do
     plugin :rodauth do
       self.db db
@@ -46,20 +46,20 @@ def create_app(db, features: [:login, :logout], table_guard_mode: nil)
 
     route do |r|
       r.rodauth
-      r.root { "Rodauth Test App" }
+      r.root { 'Rodauth Test App' }
     end
   end
 end
 
 puts "\nAvailable helpers:"
-puts "  setup_test_db                           # Create test SQLite DB"
-puts "  create_app(db, features:, table_guard_mode:)  # Create Roda app"
+puts '  setup_test_db                           # Create test SQLite DB'
+puts '  create_app(db, features:, table_guard_mode:)  # Create Roda app'
 puts "\nExample session:"
-puts "  db = setup_test_db"
-puts "  rodauth = create_app(db).rodauth"
-puts "  rodauth.list_all_required_tables"
-puts "  rodauth.table_status"
-puts "  rodauth.missing_tables"
-puts ""
+puts '  db = setup_test_db'
+puts '  rodauth = create_app(db).rodauth'
+puts '  rodauth.list_all_required_tables'
+puts '  rodauth.table_status'
+puts '  rodauth.missing_tables'
+puts ''
 
 IRB.start(__FILE__)

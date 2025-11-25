@@ -14,14 +14,14 @@ Gem::Specification.new do |spec|
     database migration helpers, table inspection, and possibly... less (this is an
     active development area, experimental stuff that may come and go).
   DESCRIPTION
-  spec.homepage = 'https://github.com/onetimesecret/rhales'
+  spec.homepage = 'https://github.com/delano/rodauth-tools'
   spec.license = 'MIT'
   spec.metadata = {
     'bug_tracker_uri' => 'https://github.com/delano/rodauth-tools/issues',
     'changelog_uri' => 'https://github.com/delano/rodauth-tools/blob/main/CHANGELOG.md',
     'documentation_uri' => 'https://github.com/delano/rodauth-tools',
     'source_code_uri' => 'https://github.com/delano/rodauth-tools',
-    'rubygems_mfa_required' => 'true',
+    'rubygems_mfa_required' => 'true'
   }
   spec.files = Dir.chdir(__dir__) do
     `git ls-files -z`.split("\x0").reject do |f|

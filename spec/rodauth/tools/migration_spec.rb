@@ -16,7 +16,6 @@ RSpec.describe Rodauth::Tools::Migration do
       expect(generator.features).to eq(%i[base otp])
     end
 
-
     it 'accepts custom prefix' do
       generator = described_class.new(features: [:base], prefix: 'user')
       expect(generator.prefix).to eq('user')
@@ -32,7 +31,6 @@ RSpec.describe Rodauth::Tools::Migration do
         described_class.new(features: [])
       end.to raise_error(ArgumentError, /No features specified/)
     end
-
   end
 
   describe '#migration_name' do
