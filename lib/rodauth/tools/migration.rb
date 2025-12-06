@@ -164,9 +164,9 @@ module Rodauth
       def json_type
         case db.database_type
         when :postgres
-          :jsonb
+          ':jsonb'
         when :mysql
-          :json
+          ':json'
         when :sqlite
           String
         else

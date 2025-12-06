@@ -98,7 +98,7 @@ RSpec.describe Rodauth::Tools::Migration do
         generator = described_class.new(features: [:audit_logging], db_adapter: :postgres)
         migration = generator.generate
 
-        expect(migration).to include('column :metadata, jsonb')
+        expect(migration).to include('column :metadata, :jsonb')
         expect(migration).to include('create_table(:account_authentication_audit_logs)')
       end
     end
@@ -108,7 +108,7 @@ RSpec.describe Rodauth::Tools::Migration do
         generator = described_class.new(features: [:audit_logging], db_adapter: :mysql)
         migration = generator.generate
 
-        expect(migration).to include('column :metadata, json')
+        expect(migration).to include('column :metadata, :json')
         expect(migration).to include('create_table(:account_authentication_audit_logs)')
       end
     end
