@@ -155,12 +155,20 @@ module Rodauth
       end
 
       # Helper method for JSON column type based on database type
+      #
+      # PostgreSQL: Use native jsonb type for efficient JSON storage and querying
+      # MySQL: Use native json type (supported since MySQL 5.7.8)
+      # SQLite: Use String type - SQLite stores JSON as text, but has JSON1 extension
+      #         for querying. Sequel doesn't have a :json type for SQLite.
+      # Other: Fall back to String for maximum compatibility
       def json_type
         case db.database_type
         when :postgres
-          :jsonb
-        when :sqlite, :mysql
-          :json
+          ':jsonb'
+        when :mysql
+          ':json'
+        when :sqlite
+          String
         else
           String
         end
