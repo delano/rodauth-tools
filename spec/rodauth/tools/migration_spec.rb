@@ -92,6 +92,48 @@ RSpec.describe Rodauth::Tools::Migration do
     end
   end
 
+  describe 'audit_logging feature with json_type' do
+    context 'with PostgreSQL database' do
+      it 'uses jsonb type for metadata column' do
+        generator = described_class.new(features: [:audit_logging], db_adapter: :postgres)
+        migration = generator.generate
+
+        expect(migration).to include('column :metadata, jsonb')
+        expect(migration).to include('create_table(:account_authentication_audit_logs)')
+      end
+    end
+
+    context 'with MySQL database' do
+      it 'uses json type for metadata column' do
+        generator = described_class.new(features: [:audit_logging], db_adapter: :mysql)
+        migration = generator.generate
+
+        expect(migration).to include('column :metadata, json')
+        expect(migration).to include('create_table(:account_authentication_audit_logs)')
+      end
+    end
+
+    context 'with SQLite database' do
+      it 'uses String type for metadata column since SQLite stores JSON as text' do
+        generator = described_class.new(features: [:audit_logging], db_adapter: :sqlite)
+        migration = generator.generate
+
+        expect(migration).to include('column :metadata, String')
+        expect(migration).to include('create_table(:account_authentication_audit_logs)')
+      end
+    end
+
+    context 'with other database types' do
+      it 'uses String type for metadata column for maximum compatibility' do
+        generator = described_class.new(features: [:audit_logging], db_adapter: :oracle)
+        migration = generator.generate
+
+        expect(migration).to include('column :metadata, String')
+        expect(migration).to include('create_table(:account_authentication_audit_logs)')
+      end
+    end
+  end
+
   describe 'all available features' do
     let(:all_features) do
       %i[
