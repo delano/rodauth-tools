@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    rodauth-tools (0.3.0)
+    rodauth-tools (0.3.1)
       dry-inflector (~> 1.1)
       rodauth (~> 2.41)
       sequel (~> 5.0)
