@@ -27,7 +27,7 @@ group :test do
   gem 'rotp'
   gem 'rqrcode'
   gem 'sequel-activerecord_connection', '~> 2.0'
-  gem 'sqlite3', '~> 2.8'
+  gem 'sqlite3', '~> 2.9'
   gem 'tilt', '~> 2.4'
   gem 'tryouts', '~> 3.0'
   gem 'warning'
