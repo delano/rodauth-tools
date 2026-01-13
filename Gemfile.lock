@@ -281,7 +281,7 @@ GEM
     sqlite3 (2.9.0-x86_64-linux-gnu)
     stringio (3.2.0)
     thor (1.5.0)
-    tilt (2.6.1)
+    tilt (2.7.0)
     timeout (0.6.0)
     tpm-key_attestation (0.14.1)
       bindata (~> 2.4)
@@ -347,7 +347,7 @@ DEPENDENCIES
   rubocop-rspec
   sequel-activerecord_connection (~> 2.0)
   sqlite3 (~> 2.9)
-  tilt (~> 2.4)
+  tilt (~> 2.7)
   tryouts (~> 3.0)
   warning
   webauthn
