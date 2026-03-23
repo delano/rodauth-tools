@@ -231,9 +231,9 @@ GEM
     regexp_parser (2.11.3)
     reline (0.6.3)
       io-console (~> 0.5)
-    roda (3.99.0)
+    roda (3.102.0)
       rack
-    rodauth (2.42.0)
+    rodauth (2.43.0)
       roda (>= 2.6.0)
       sequel (>= 4)
     rotp (6.3.0)
