@@ -8,7 +8,7 @@ gemspec
 
 gem 'dry-inflector'
 gem 'irb'
-gem 'rake', '~> 13.3'
+gem 'rake', '~> 13.4'
 
 group :development do
   gem 'bundler-audit'
