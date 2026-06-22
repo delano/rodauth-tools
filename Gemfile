@@ -13,7 +13,7 @@ gem 'rake', '~> 13.4'
 group :development do
   gem 'bundler-audit'
   gem 'rspec', '~> 3.0'
-  gem 'rubocop', '~> 1.87'
+  gem 'rubocop', '~> 1.88'
   gem 'rubocop-rake'
   gem 'rubocop-rspec'
 end
