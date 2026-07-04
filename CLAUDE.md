@@ -42,21 +42,30 @@ bin/console
 - Uses `Rodauth::Feature.define(:hmac_secret_guard, :HmacSecretGuard)` pattern
 - Automatically loads HMAC secret from environment variable (defaults to `HMAC_SECRET`)
 - Validates secret is configured at application startup via `post_configure` hook
-- Production mode: Raises `ConfigurationError` if secret missing
-- Development mode: Logs warning and uses configurable fallback secret
-- Deletes secret from ENV after loading for security
-- Provides `production?` and `validate_secrets!` public methods
+- Production mode: Raises `ConfigurationError` if secret missing, blank, or (when `minimum_secret_length` is set) too short
+- Development mode: Logs warning and uses a fallback secret (random per-process by default)
+- Deletes secret from ENV after loading for security (strips whitespace; blank values treated as absent)
+- Provides `production?`, `validate_hmac_secret!`, and (aliased) `validate_secrets!` public methods
 
 **lib/rodauth/features/jwt_secret_guard.rb** - External Rodauth feature
 
 - Uses `Rodauth::Feature.define(:jwt_secret_guard, :JwtSecretGuard)` pattern
 - Automatically loads JWT secret from environment variable (defaults to `JWT_SECRET`)
 - Validates secret is configured at application startup via `post_configure` hook
-- Production mode: Raises `ConfigurationError` if secret missing
-- Development mode: Logs warning and uses configurable fallback secret
-- Deletes secret from ENV after loading for security
-- Provides `production?` and `validate_secrets!` public methods
+- Production mode: Raises `ConfigurationError` if secret missing, blank, or (when `minimum_secret_length` is set) too short
+- Development mode: Logs warning and uses a fallback secret (random per-process by default)
+- Deletes secret from ENV after loading for security (strips whitespace; blank values treated as absent)
+- Provides `production?`, `validate_jwt_secret!`, and (aliased) `validate_secrets!` public methods
 - Defines `jwt_secret` configuration method for standalone use
+
+**lib/rodauth/secret_guard.rb** - Shared support module (`Rodauth::SecretGuard`)
+
+- Kind-parameterized (`:hmac`/`:jwt`) logic behind both secret-guard features
+- Plain module functions taking the Rodauth instance explicitly — no mixed-in
+  method names, so both guards can be enabled together without one shadowing the
+  other (each feature's `post_configure` validates its own secret via `kind`)
+- Handles ENV loading (`load_from_env!`), validation (`validate!`), blank/whitespace
+  detection, production detection, and minimum-length enforcement
 
 **lib/rodauth/tools/migration.rb** - Sequel migration generator
 

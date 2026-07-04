@@ -28,9 +28,13 @@ Determines if application is running in production mode.
 
 **Default:** `proc { ENV.fetch('RACK_ENV', 'production') == 'production' }`
 
+The default **fails safe**: an unset `RACK_ENV` is treated as production, so a
+misconfigured deploy raises instead of silently using the development fallback
+secret.
+
 ```ruby
-# Proc - dynamic check
-production_env_check proc { ENV['RACK_ENV'] == 'production' }
+# Proc - dynamic check (fail-safe: unset RACK_ENV counts as production)
+production_env_check proc { ENV.fetch('RACK_ENV', 'production') == 'production' }
 
 # Boolean - static value
 production_env_check true
@@ -40,6 +44,10 @@ production_env_check proc {
   ENV['RAILS_ENV'] == 'production' || ENV['DEPLOYMENT_ENV'] == 'staging'
 }
 ```
+
+> **Avoid** `proc { ENV['RACK_ENV'] == 'production' }`. When `RACK_ENV` is unset
+> that returns `false`, so a real production deploy is treated as development and
+> silently falls back to the insecure development secret.
 
 ### `validate_secrets_on_configure?`
 
@@ -53,12 +61,28 @@ validate_secrets_on_configure? false  # Disable validation
 
 ### `development_jwt_secret_fallback`
 
-Fallback JWT secret for development environments.
+Fallback JWT secret used in development when no secret is configured.
 
-**Default:** `'dev-only-insecure-example-jwt-secret-needs-to-be-changed-in-prod'`
+**Default:** a random per-process value (`SecureRandom.hex(32)`).
+
+The default is generated once per process rather than being a constant baked
+into source. It is therefore never publicly known and is unstable across
+restarts, so it can't be mistaken for a real, persistent secret. Set an explicit
+value only if you need JWTs to remain valid across restarts in development.
 
 ```ruby
 development_jwt_secret_fallback 'my-custom-dev-secret-12345'
+```
+
+### `minimum_secret_length`
+
+Minimum length required for a configured secret. Enforced **in production only**,
+so development fallbacks and short test secrets are unaffected.
+
+**Default:** `0` (disabled)
+
+```ruby
+minimum_secret_length 32  # reject secrets shorter than 32 chars in production
 ```
 
 ### `jwt_secret_missing_error`
@@ -154,7 +178,7 @@ end
 
 1. **Check existing jwt_secret**
    - If already set via configuration block, skip auto-configuration
-   - If nil or empty, proceed to step 2
+   - If nil, empty, or whitespace-only, proceed to step 2
 
 2. **Read from environment variable**
    - Read value from `JWT_SECRET` (or configured env key)
@@ -191,15 +215,31 @@ Logs warning to logger (if available) or stderr, then uses `development_jwt_secr
 
 ## Public Methods
 
+### `validate_jwt_secret!`
+
+Manually trigger JWT secret validation. This is the collision-free entry
+point — prefer it when both `hmac_secret_guard` and `jwt_secret_guard` are
+enabled.
+
+```ruby
+rodauth.validate_jwt_secret!
+# Raises error in production if the secret is missing, blank, or too short
+# Sets a fallback in development if the secret is missing
+```
+
 ### `validate_secrets!`
 
-Manually trigger secret validation.
+Backwards-compatible alias for `validate_jwt_secret!`.
 
 ```ruby
 rodauth.validate_secrets!
-# Raises error in production if secret missing
-# Sets fallback in development if secret missing
 ```
+
+> **Note:** `hmac_secret_guard` defines a `validate_secrets!` of its own. When
+> both guards are enabled this shared name resolves to only one of them, so use
+> the kind-specific `validate_jwt_secret!` / `validate_hmac_secret!` for an
+> unambiguous manual call. Boot-time validation does not rely on the alias —
+> each feature's `post_configure` validates its own secret independently.
 
 ### `production?`
 
@@ -518,7 +558,8 @@ Validation runs in `post_configure` hook:
 ```ruby
 def post_configure
   super
-  validate_secrets! if validate_secrets_on_configure?
+  Rodauth::SecretGuard.load_from_env!(self, :jwt)
+  validate_jwt_secret! if validate_secrets_on_configure?
 end
 ```
 
@@ -532,42 +573,38 @@ end
 
 ### Multiple Secrets
 
-Guard multiple secrets by calling the feature with different configurations:
+To guard both the JWT and HMAC secrets, enable both features. They share
+kind-keyed logic (`Rodauth::SecretGuard`), so each secret is validated
+independently at boot:
 
 ```ruby
 plugin :rodauth do
-  enable :jwt_secret_guard
-
-  # Validate jwt_secret
-  validate_secrets!
-
-  # Also validate jwt_secret if using JWT
-  if respond_to?(:jwt_secret)
-    unless jwt_secret
-      raise Rodauth::ConfigurationError, "JWT_SECRET must be set"
-    end
-  end
+  enable :jwt_secret_guard, :hmac_secret_guard
+  # Both JWT_SECRET and HMAC_SECRET are validated in post_configure
 end
 ```
 
 ### Custom Validation Logic
 
-> **Note:** `validate_secrets!` does not accept a block. To add custom validation logic, override the `validate_secrets!` method in your configuration.
+A minimum length is available out of the box via `minimum_secret_length`
+(production only). For anything beyond that, override the kind-specific
+`validate_jwt_secret!` method in your configuration.
+
+> **Note:** `validate_jwt_secret!` does not accept a block. Override the method
+> (not `validate_secrets!`, which is a shared alias) so it keeps working when
+> `hmac_secret_guard` is also enabled.
 
 ```ruby
 plugin :rodauth do
   enable :jwt_secret_guard
 
-  # Override validate_secrets! to add custom checks
-  def validate_secrets!
-    super # Call the original validation
+  minimum_secret_length 64  # enforced in production
+
+  # Override for additional checks
+  validate_jwt_secret! do
+    super() # Call the original validation
 
     secret = jwt_secret
-
-    # Custom length requirement
-    if secret && secret.length < 64
-      raise Rodauth::ConfigurationError, "JWT secret must be at least 64 characters"
-    end
 
     # Custom entropy check
     if secret && secret.chars.uniq.length < 16

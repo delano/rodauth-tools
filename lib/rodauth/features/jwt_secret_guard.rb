@@ -2,6 +2,9 @@
 #
 # frozen_string_literal: true
 
+require 'securerandom'
+require_relative '../secret_guard'
+
 module Rodauth
   # Automatically sets jwt_secret based on JWT_SECRET and validates it is properly
   # configured before the application starts. This helps prevent deployment
@@ -9,22 +12,33 @@ module Rodauth
   # particularly in production environments.
   #
   # By default, this feature checks during +post_configure+ that +jwt_secret+
-  # is set to a non-nil, non-empty value. In production mode, it raises a
+  # is set to a non-blank value. In production mode, it raises a
   # ConfigurationError if the secret is missing. In development mode, it logs
   # a warning and uses a fallback development secret.
+  #
+  # This feature and +hmac_secret_guard+ can be enabled together. Their shared
+  # logic lives in +Rodauth::SecretGuard+ and is keyed by secret kind, so each
+  # secret is validated independently at boot.
   #
   # @example Basic Configuration
   #   plugin :rodauth do
   #     enable :jwt_secret_guard
   #   end
   #
-  # @example Customizing Production Detection
+  # @example Customizing Production Detection (fail-safe)
   #   plugin :rodauth do
   #     enable :jwt_secret_guard
-  #     production_env_check proc { ENV['RACK_ENV'] == 'production' }
-  #     # Or use a boolean:
+  #     # Treat an unset RACK_ENV as production so a misconfigured deploy fails
+  #     # closed rather than silently using the development fallback secret:
+  #     production_env_check proc { ENV.fetch('RACK_ENV', 'production') == 'production' }
+  #     # Or force it:
   #     # production_env_check true
   #   end
+  #
+  #   # The default already fails safe: an unset RACK_ENV is treated as
+  #   # production. Avoid `proc { ENV['RACK_ENV'] == 'production' }` — when the
+  #   # variable is unset that returns false and silently falls back to the
+  #   # insecure development secret in what is really a production deploy.
   #
   # @example Customizing Error Messages
   #   plugin :rodauth do
@@ -39,6 +53,16 @@ module Rodauth
   #     development_jwt_secret_fallback 'my-custom-dev-secret'
   #   end
   #
+  #   # The default fallback is a random per-process value (SecureRandom.hex),
+  #   # not a constant baked into source. Set an explicit value only if you need
+  #   # JWTs to remain valid across restarts in development.
+  #
+  # @example Enforcing a Minimum Secret Length (production only)
+  #   plugin :rodauth do
+  #     enable :jwt_secret_guard
+  #     minimum_secret_length 32  # reject short secrets in production; 0 disables (default)
+  #   end
+  #
   # @example Disabling Validation
   #   plugin :rodauth do
   #     enable :jwt_secret_guard
@@ -49,8 +73,10 @@ module Rodauth
     auth_value_method :jwt_secret_env_key, 'JWT_SECRET'
     auth_value_method :production_env_check, proc { ENV.fetch('RACK_ENV', 'production') == 'production' }
     auth_value_method :validate_secrets_on_configure?, true
-    auth_value_method :development_jwt_secret_fallback,
-                      'dev-only-insecure-example-jwt-secret-needs-to-be-changed-in-prod'
+    auth_value_method :minimum_secret_length, 0
+    # Random per-process fallback: never committed to source, and unstable across
+    # restarts so it can't be mistaken for a real, persistent secret.
+    auth_value_method :development_jwt_secret_fallback, SecureRandom.hex(32)
 
     # Make jwt_secret configurable (if not already provided by jwt feature)
     auth_value_method :jwt_secret, nil
@@ -61,60 +87,44 @@ module Rodauth
     def post_configure
       super
 
-      # Auto-set jwt_secret if not already set
-      if jwt_secret.nil? || (jwt_secret.respond_to?(:empty?) && jwt_secret.empty?)
-        env_value = ENV.delete(jwt_secret_env_key)
-        self.class.send(:define_method, :jwt_secret) { env_value } if env_value && !env_value.empty?
-      end
-
-      validate_secrets! if validate_secrets_on_configure?
+      Rodauth::SecretGuard.load_from_env!(self, :jwt)
+      validate_jwt_secret! if validate_secrets_on_configure?
     end
 
-    auth_methods :validate_secrets!, :production?
+    auth_methods :validate_secrets!, :validate_jwt_secret!, :production?
 
     # Check if we're running in production environment.
     #
     # @return [Boolean] true if running in production mode based on production_env_check
     def production?
-      case v = production_env_check
-      when Proc
-        instance_exec(&v)
-      else
-        !!v
-      end
+      Rodauth::SecretGuard.production?(self)
     end
 
-    # Validate that JWT secret is properly configured.
-    # Raises ConfigurationError in production if secret is missing.
-    # In development, logs a warning and sets a fallback secret.
+    # Validate that the JWT secret is properly configured. Raises
+    # ConfigurationError in production if the secret is missing, blank, or (when
+    # +minimum_secret_length+ is set) too short. In development it warns and
+    # installs a fallback secret.
     #
-    # @raise [Rodauth::ConfigurationError] if jwt_secret is missing in production
+    # This is the collision-free entry point: prefer it over +validate_secrets!+
+    # when both secret guards are enabled.
+    #
+    # @raise [Rodauth::ConfigurationError] if jwt_secret is unusable in production
+    # @return [void]
+    def validate_jwt_secret!
+      Rodauth::SecretGuard.validate!(self, :jwt)
+    end
+
+    # Backwards-compatible alias for +validate_jwt_secret!+.
+    #
+    # Note: +hmac_secret_guard+ defines a +validate_secrets!+ of its own, so when
+    # both guards are enabled this name resolves to only one of them. Boot-time
+    # validation does not rely on it (see +post_configure+); use
+    # +validate_jwt_secret!+ for an unambiguous manual call.
+    #
+    # @raise [Rodauth::ConfigurationError] if jwt_secret is unusable in production
     # @return [void]
     def validate_secrets!
-      # Get the current jwt_secret value (may be nil)
-      current_secret = jwt_secret
-
-      # Return early if secret is present
-      return unless current_secret.nil? || (current_secret.respond_to?(:empty?) && current_secret.empty?)
-      raise Rodauth::ConfigurationError, jwt_secret_missing_error if production?
-
-      # In development, warn and set a fallback
-      warn_dev_secret
-      self.class.send(:define_method, :jwt_secret) { development_jwt_secret_fallback }
-    end
-
-    private
-
-    # Warn about using development secret.
-    # Logs to logger if available, otherwise to stderr.
-    #
-    # @return [void]
-    def warn_dev_secret
-      if respond_to?(:logger) && logger
-        logger.warn(jwt_secret_dev_warning)
-      else
-        warn(jwt_secret_dev_warning)
-      end
+      validate_jwt_secret!
     end
   end
 end
