@@ -42,21 +42,30 @@ bin/console
 - Uses `Rodauth::Feature.define(:hmac_secret_guard, :HmacSecretGuard)` pattern
 - Automatically loads HMAC secret from environment variable (defaults to `HMAC_SECRET`)
 - Validates secret is configured at application startup via `post_configure` hook
-- Production mode: Raises `ConfigurationError` if secret missing
-- Development mode: Logs warning and uses configurable fallback secret
-- Deletes secret from ENV after loading for security
-- Provides `production?` and `validate_secrets!` public methods
+- Production mode: Raises `ConfigurationError` if secret missing, blank, or (when `minimum_secret_length` is set) too short
+- Development mode: Logs warning and uses a fallback secret (random per-process by default)
+- Deletes secret from ENV after loading for security (strips whitespace; blank values treated as absent)
+- Provides `production?`, `validate_hmac_secret!`, and (aliased) `validate_secrets!` public methods
 
 **lib/rodauth/features/jwt_secret_guard.rb** - External Rodauth feature
 
 - Uses `Rodauth::Feature.define(:jwt_secret_guard, :JwtSecretGuard)` pattern
 - Automatically loads JWT secret from environment variable (defaults to `JWT_SECRET`)
 - Validates secret is configured at application startup via `post_configure` hook
-- Production mode: Raises `ConfigurationError` if secret missing
-- Development mode: Logs warning and uses configurable fallback secret
-- Deletes secret from ENV after loading for security
-- Provides `production?` and `validate_secrets!` public methods
+- Production mode: Raises `ConfigurationError` if secret missing, blank, or (when `minimum_secret_length` is set) too short
+- Development mode: Logs warning and uses a fallback secret (random per-process by default)
+- Deletes secret from ENV after loading for security (strips whitespace; blank values treated as absent)
+- Provides `production?`, `validate_jwt_secret!`, and (aliased) `validate_secrets!` public methods
 - Defines `jwt_secret` configuration method for standalone use
+
+**lib/rodauth/secret_guard.rb** - Shared support module (`Rodauth::SecretGuard`)
+
+- Kind-parameterized (`:hmac`/`:jwt`) logic behind both secret-guard features
+- Plain module functions taking the Rodauth instance explicitly — no mixed-in
+  method names, so both guards can be enabled together without one shadowing the
+  other (each feature's `post_configure` validates its own secret via `kind`)
+- Handles ENV loading (`load_from_env!`), validation (`validate!`), blank/whitespace
+  detection, production detection, and minimum-length enforcement
 
 **lib/rodauth/tools/migration.rb** - Sequel migration generator
 
@@ -106,7 +115,7 @@ end
 
 ### Table Guard Implementation Details
 
-**Logger Suppression:** The `table_exists?` method temporarily suppresses Sequel's logger during table existence checks. This prevents confusing ERROR logs from Sequel when checking non-existent tables (Sequel's `table_exists?` attempts a SELECT and logs the exception before catching it).
+**Existence Checks (no logger suppression):** The `table_exists?` method matches names against the database's table/view list (`db.tables` + `db.views`) rather than probing each table with a SELECT. An earlier implementation used Sequel's `table_exists?` probe and suppressed the logger around it (clearing/restoring the shared `db.loggers` array) to hide the "no such table" ERROR that Sequel logs before catching internally — but that mutation of shared connection state was not thread-safe. Listing names avoids the failed probe entirely, so no logger suppression (and no shared-state mutation) is needed. Schema-qualified identifiers (a `Sequel::SQL::QualifiedIdentifier` or a `:schema__table` Symbol) are not present in the unqualified list, so they take a separate schema-aware `db.table_exists?` probe path.
 
 **Configuration Storage:** Uses instance variables set by `auth_value_method`:
 
@@ -129,7 +138,7 @@ end
 **Introspection Methods:**
 
 - `all_table_methods` - Finds all methods ending in `_table` using Ruby reflection
-- `missing_tables` - Checks each table method against `db.table_exists?`
+- `missing_tables` - Checks each required table against the existing table/view name set (fetched once per pass to avoid an N+1 of catalog queries)
 - `table_status` - Returns array of hashes with method, table name, and existence status
 
 ### Migration Generator Architecture

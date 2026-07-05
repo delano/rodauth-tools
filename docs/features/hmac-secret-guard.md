@@ -28,9 +28,13 @@ Determines if application is running in production mode.
 
 **Default:** `proc { ENV.fetch('RACK_ENV', 'production') == 'production' }`
 
+The default **fails safe**: an unset `RACK_ENV` is treated as production, so a
+misconfigured deploy raises instead of silently using the development fallback
+secret.
+
 ```ruby
-# Proc - dynamic check
-production_env_check proc { ENV['RACK_ENV'] == 'production' }
+# Proc - dynamic check (fail-safe: unset RACK_ENV counts as production)
+production_env_check proc { ENV.fetch('RACK_ENV', 'production') == 'production' }
 
 # Boolean - static value
 production_env_check true
@@ -40,6 +44,10 @@ production_env_check proc {
   ENV['RAILS_ENV'] == 'production' || ENV['DEPLOYMENT_ENV'] == 'staging'
 }
 ```
+
+> **Avoid** `proc { ENV['RACK_ENV'] == 'production' }`. When `RACK_ENV` is unset
+> that returns `false`, so a real production deploy is treated as development and
+> silently falls back to the insecure development secret.
 
 ### `validate_secrets_on_configure?`
 
@@ -53,12 +61,40 @@ validate_secrets_on_configure? false  # Disable validation
 
 ### `development_hmac_secret_fallback`
 
-Fallback HMAC secret for development environments.
+Fallback HMAC secret used in development when no secret is configured.
 
-**Default:** `'dev-only-insecure-example-hmac-secret-needs-to-be-changed-in-prod'`
+**Default:** a random per-process value (`SecureRandom.hex(32)`).
+
+The default is generated once per process rather than being a constant baked
+into source. It is therefore never publicly known and is unstable across
+restarts, so it can't be mistaken for a real, persistent secret. Set an explicit
+value only if you need HMAC output to be stable across restarts in development.
+
+> **Caution — multi-process and multi-host environments.** Because the default
+> fallback is generated per process and at random, it is **not** shared across
+> processes or hosts and changes on every restart. Any tokens derived from
+> `hmac_secret` — password-reset links, remember-me tokens, and similar — become
+> invalid after a restart, and in a load-balanced or multi-instance deployment a
+> token minted by one instance fails on another (each process holds a different
+> fallback). This most often bites review apps, staging, CI, and load-balanced
+> development where `RACK_ENV` is not `production` yet more than one process is
+> involved. In those environments, set an explicit, stable
+> `development_hmac_secret_fallback` (or provide a real `HMAC_SECRET`) rather than
+> relying on the random default.
 
 ```ruby
 development_hmac_secret_fallback 'my-custom-dev-secret-12345'
+```
+
+### `minimum_secret_length`
+
+Minimum length required for a configured secret. Enforced **in production only**,
+so development fallbacks and short test secrets are unaffected.
+
+**Default:** `0` (disabled)
+
+```ruby
+minimum_secret_length 32  # reject secrets shorter than 32 chars in production
 ```
 
 ### `hmac_secret_missing_error`
@@ -154,7 +190,7 @@ end
 
 1. **Check existing hmac_secret**
    - If already set via configuration block, skip auto-configuration
-   - If nil or empty, proceed to step 2
+   - If nil, empty, or whitespace-only, proceed to step 2
 
 2. **Read from environment variable**
    - Read value from `HMAC_SECRET` (or configured env key)
@@ -165,6 +201,14 @@ end
    - Check if hmac_secret is properly configured
    - Production: Raise error if missing
    - Development: Warn and use fallback
+
+> **Note:** Secrets read from the environment variable are whitespace-trimmed —
+> leading and trailing whitespace is stripped, so `HMAC_SECRET=" abc\n"` becomes
+> `"abc"` (this tolerates the trailing newlines common in `.env` files). A value
+> that is entirely whitespace is treated as **absent**, triggering the production
+> error or the development fallback. Secrets set directly via the `hmac_secret`
+> DSL are used verbatim, though the `minimum_secret_length` check measures their
+> length after stripping.
 
 ### Production Mode
 
@@ -191,15 +235,34 @@ Logs warning to logger (if available) or stderr, then uses `development_hmac_sec
 
 ## Public Methods
 
+### `validate_hmac_secret!`
+
+Manually trigger HMAC secret validation. This is the collision-free entry
+point — prefer it when both `hmac_secret_guard` and `jwt_secret_guard` are
+enabled.
+
+```ruby
+rodauth.validate_hmac_secret!
+# Raises error in production if the secret is missing, blank, or too short
+# Sets a fallback in development if the secret is missing
+```
+
 ### `validate_secrets!`
 
-Manually trigger secret validation.
+Backwards-compatible alias for `validate_hmac_secret!`.
 
 ```ruby
 rodauth.validate_secrets!
-# Raises error in production if secret missing
-# Sets fallback in development if secret missing
 ```
+
+> **Note:** `jwt_secret_guard` defines a `validate_secrets!` of its own. When
+> both guards are enabled this shared name resolves to only one of them, so use
+> the kind-specific `validate_hmac_secret!` / `validate_jwt_secret!` for an
+> unambiguous manual call. Boot-time validation does not rely on the alias —
+> each feature's `post_configure` validates its own secret independently. The
+> same applies when **overriding** validation: with both guards enabled, override
+> the kind-specific `validate_hmac_secret!` (not `validate_secrets!`), or your
+> override will silently apply to only one of the two secrets.
 
 ### `production?`
 
@@ -518,7 +581,8 @@ Validation runs in `post_configure` hook:
 ```ruby
 def post_configure
   super
-  validate_secrets! if validate_secrets_on_configure?
+  Rodauth::SecretGuard.load_from_env!(self, :hmac)
+  validate_hmac_secret! if validate_secrets_on_configure?
 end
 ```
 
@@ -532,42 +596,50 @@ end
 
 ### Multiple Secrets
 
-Guard multiple secrets by calling the feature with different configurations:
+To guard both the HMAC and JWT secrets, enable both features. They share
+kind-keyed logic (`Rodauth::SecretGuard`), so each secret is validated
+independently at boot:
 
 ```ruby
 plugin :rodauth do
-  enable :hmac_secret_guard
-
-  # Validate hmac_secret
-  validate_secrets!
-
-  # Also validate jwt_secret if using JWT
-  if respond_to?(:jwt_secret)
-    unless jwt_secret
-      raise Rodauth::ConfigurationError, "JWT_SECRET must be set"
-    end
-  end
+  enable :hmac_secret_guard, :jwt_secret_guard
+  # Both HMAC_SECRET and JWT_SECRET are validated in post_configure
 end
 ```
 
+> **Shared vs. kind-specific settings.** When both guards are enabled,
+> `minimum_secret_length`, `production_env_check`, and
+> `validate_secrets_on_configure?` are each defined by both features under the
+> same name and are therefore **shared** — you set each once and it applies to
+> **both** secrets; you cannot give HMAC and JWT different values for these. The
+> env key, error messages, and fallback are kind-specific, so they can differ per
+> secret: `hmac_secret_env_key` vs `jwt_secret_env_key`,
+> `hmac_secret_missing_error` vs `jwt_secret_missing_error`, and
+> `development_hmac_secret_fallback` vs `development_jwt_secret_fallback`.
+
 ### Custom Validation Logic
 
-> **Note:** `validate_secrets!` does not accept a block. To add custom validation logic, override the `validate_secrets!` method in your configuration.
+A minimum length is available out of the box via `minimum_secret_length`
+(production only). For anything beyond that, override the kind-specific
+`validate_hmac_secret!` method in your configuration.
+
+> **Note:** `validate_hmac_secret!` does not take a block when *called* at
+> runtime. To customize validation, *override* the method in your configuration
+> (the block form shown below is the Rodauth config-DSL override, not a runtime
+> call). Override `validate_hmac_secret!` — not `validate_secrets!`, which is a
+> shared alias — so it keeps working when `jwt_secret_guard` is also enabled.
 
 ```ruby
 plugin :rodauth do
   enable :hmac_secret_guard
 
-  # Override validate_secrets! to add custom checks
-  validate_secrets! do
+  minimum_secret_length 64  # enforced in production
+
+  # Override for additional checks
+  validate_hmac_secret! do
     super() # Call the original validation
 
     secret = hmac_secret
-
-    # Custom length requirement
-    if secret && secret.length < 64
-      raise Rodauth::ConfigurationError, "HMAC secret must be at least 64 characters"
-    end
 
     # Custom entropy check
     if secret && secret.chars.uniq.length < 16
