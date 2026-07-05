@@ -9,19 +9,24 @@ module Rodauth
     # Keyed format-preserving obfuscator for integer primary keys.
     #
     # Turns a numeric account id (e.g. +2+) into a fixed-width, URL-safe,
-    # non-sequential token (e.g. +"9F3K2M0QALZ7T"+) and back again, WITHOUT
+    # non-sequential token (e.g. +"E946V4SD7Z7RV"+) and back again, WITHOUT
     # changing the database schema. The mapping is a keyed pseudo-random
     # permutation (a bijection) over the 64-bit domain, so:
     #
     # - every id maps to exactly one token and vice-versa (no collisions),
     # - the token reveals nothing about the id or about neighbouring ids
     #   to anyone who does not hold the secret,
-    # - +decode(encode(id)) == id+ for all ids in range.
+    # - +decode(encode(id)) == id+ for all ids in range, and +decode+ rejects
+    #   any well-formed-but-non-canonical token (see {#decode}).
     #
     # It is a 4-round Feistel network keyed with HMAC-SHA256. This is genuine
     # keyed encryption over a small domain (format-preserving encryption),
     # not a reversible "encoder" like Hashids/Sqids: without the secret the
-    # permutation cannot be inverted or distinguished from random.
+    # permutation is hard to invert and, for a bounded number of observed
+    # tokens, hard to distinguish from random. As with any small-block Feistel
+    # construction, that only holds up to the birthday bound of the 32-bit
+    # half-block (roughly 2^16 tokens observed under one secret) — it is not
+    # an unconditional guarantee at unbounded query volume.
     #
     # The output alphabet is Crockford Base32, which deliberately excludes the
     # +_+ character so encoded ids never collide with Rodauth's +token_separator+.
@@ -35,7 +40,7 @@ module Rodauth
     #
     # @example
     #   cipher = Rodauth::Tools::AccountIdCipher.new(ENV.fetch('ACCOUNT_ID_SECRET'))
-    #   token  = cipher.encode(2)     # => "9F3K2M0QALZ7T" (13 chars)
+    #   token  = cipher.encode(2)     # => "E946V4SD7Z7RV" (13 chars)
     #   cipher.decode(token)          # => 2
     #   cipher.decode('not-a-token')  # => nil
     class AccountIdCipher
@@ -65,7 +70,10 @@ module Rodauth
 
       # Encode an integer id into its fixed-width obfuscated token.
       #
-      # @param id [Integer, #to_i] the numeric account id
+      # @param id [Integer, String] the numeric account id, parsed with the
+      #   strict Kernel#Integer — unlike #to_i, a non-integer String (or other
+      #   value Integer() rejects) raises ArgumentError rather than silently
+      #   truncating.
       # @return [String] a 13-character Crockford Base32 token
       def encode(id)
         base32(feistel(Integer(id) & MASK64, :encrypt))
@@ -75,13 +83,23 @@ module Rodauth
       #
       # Returns +nil+ for anything that is not a well-formed 13-char token (wrong
       # length, illegal character, non-string), so callers can pass foreign input
-      # through without raising.
+      # through without raising. Also returns +nil+ for a well-formed-but-
+      # non-canonical token: 13 Crockford chars encode 65 bits for a 64-bit
+      # block, so each id has exactly one canonical 13-char token but a second,
+      # non-canonical encoding that differs only in the (discarded) 65th bit of
+      # its first character. Re-encoding the decrypted id and comparing against
+      # the input rejects that non-canonical form, keeping {#decode} a strict
+      # inverse of {#encode} rather than a 2-to-1 mapping.
       #
       # @param token [String] a token previously produced by {#encode}
-      # @return [Integer, nil] the original id, or nil if +token+ is not valid
+      # @return [Integer, nil] the original id, or nil if +token+ is not a
+      #   valid, canonical token
       def decode(token)
         number = unbase32(token)
-        number && feistel(number, :decrypt)
+        return nil unless number
+
+        id = feistel(number, :decrypt)
+        encode(id) == token ? id : nil
       end
 
       private

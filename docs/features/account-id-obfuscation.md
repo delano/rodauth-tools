@@ -14,7 +14,7 @@ https://example.com/verify-account?key=2_SspVzDfIxrn3wzZ97lLQVZ6i9QO4VZkIaW2Wz0M
 With this feature enabled it becomes:
 
 ```text
-https://example.com/verify-account?key=A9F3K2M0QALZ7T_SspVzDfIxrn3wzZ97lLQVZ6i9QO4VZkIaW2Wz0MU_s8
+https://example.com/verify-account?key=AE946V4SD7Z7RV_SspVzDfIxrn3wzZ97lLQVZ6i9QO4VZkIaW2Wz0MU_s8
 ```
 
 The integer primary key is still used everywhere internally; only the value that
@@ -43,7 +43,7 @@ feature overrides two `email_base` methods:
   integer before Rodauth's normal verification runs.
 
 The obfuscated id is `<version><13 Crockford-Base32 chars>` (14 chars total), e.g.
-`A9F3K2M0QALZ7T`. The `<version>` is a single **non-digit** character (`A` by
+`AE946V4SD7Z7RV`. The `<version>` is a single **non-digit** character (`A` by
 default). Because Rodauth's legacy ids are always decimal digits, the version tag
 makes "is this obfuscated or a legacy id?" a deterministic first-character test —
 which is what guarantees backward compatibility (see below).
@@ -51,7 +51,10 @@ which is what guarantees backward compatibility (see below).
 The underlying transform is `Rodauth::Tools::AccountIdCipher`: a 4-round Feistel
 network keyed with HMAC-SHA256 (keyed format-preserving encryption). It is a
 bijection over the 64-bit domain, so every id maps to exactly one token and back,
-with no collisions.
+with no collisions. `decode` also rejects the rare well-formed-but-non-canonical
+token (13 Crockford chars encode 65 bits for a 64-bit block, so each id has one
+canonical token and one non-canonical near-duplicate) by re-encoding and comparing,
+so decode is a strict inverse of encode rather than 2-to-1.
 
 ### Scoped overrides
 
@@ -61,6 +64,21 @@ This feature deliberately does **not** override the lower-level `split_token` /
 remember cookie), the blast radius is exactly the surfaces that leak `account_id`
 in a user-visible URL or cookie. `internal_request` delegates through the override
 untouched.
+
+The remember-cookie wrapper (`_set_remember_cookie`/`_get_remember_cookie`) is
+defined once as an ordinary method in this feature's module, guarded internally by
+`account_id_obfuscation_remember_cookie?`/`features.include?(:remember)`, rather
+than installed per-instance from `post_configure`. `internal_request` re-runs
+`post_configure` on an internally-created subclass of the already-configured Auth
+class; a per-instance install would run again there and define a second override
+whose `super` resolved to the first override instead of to `remember.rb`,
+double-obfuscating the id and raising on the resulting non-decimal string. A
+method defined once in the module has exactly one place for `super` to resolve to,
+regardless of how many subclasses `post_configure` runs on. One consequence: this
+relies on `account_id_obfuscation` being enabled *after* `remember` (`enable
+:login, :remember, :account_id_obfuscation`, as shown throughout this doc) so it
+sits above `remember` in the ancestor chain; enabling it before `remember` means
+`remember`'s own method wins the chain and the cookie is left un-obfuscated.
 
 ## Configuration
 
@@ -128,9 +146,19 @@ behaviour). Proc or Boolean.
 
 **Default:** `proc { ENV.fetch('RACK_ENV', 'production') == 'production' }`
 
+This is the *same* config method (and, when this feature is co-enabled with
+`hmac_secret_guard`/`jwt_secret_guard`, potentially the *same* stored value) that
+those two guards read via `Rodauth::SecretGuard.production?`. Setting it once
+configures production detection for whichever of these secret-lifecycle features
+you have enabled. As with the guards, avoid `proc { ENV['RACK_ENV'] == 'production' }`
+— when the variable is unset that returns `false` and silently falls back to the
+insecure development secret in what is really a production deploy; the default
+above fails safe instead by treating an unset `RACK_ENV` as production.
+
 ### `validate_secrets_on_configure?`
 
-Enable/disable secret validation during the `post_configure` hook.
+Enable/disable secret validation during the `post_configure` hook. Shared name
+and semantics with `hmac_secret_guard`/`jwt_secret_guard`.
 
 **Default:** `true`
 
@@ -139,6 +167,13 @@ Enable/disable secret validation during the `post_configure` hook.
 Fallback secret (>= 32 bytes) used in development when none is configured.
 
 **Default:** `'dev-only-insecure-account-id-obfuscation-secret-please-change-me'`
+
+Unlike the sibling guards' `SecureRandom.hex`-per-process fallback, this default is
+a **fixed** string, deliberately. Obfuscated tokens have no server-side session to
+fall back on: if the fallback secret changed on every process restart, every
+in-flight email link and remember cookie minted before a development restart would
+stop decoding. Determinism across restarts is the point here — it does not make the
+value any less of a "change this before production" placeholder.
 
 ### Error / warning messages
 
@@ -164,11 +199,21 @@ end
 ### Public methods
 
 ```ruby
-rodauth.obfuscate_account_id(2)      # => "A9F3K2M0QALZ7T"
-rodauth.deobfuscate_account_id(tok)  # => 2, or nil if tok is not one of our tokens
-rodauth.production?                  # => true or false
-rodauth.validate_secrets!            # manual secret validation
+rodauth.obfuscate_account_id(2)                       # => "AE946V4SD7Z7RV"
+rodauth.deobfuscate_account_id(tok)                    # => 2, or nil if tok is not one of our tokens
+rodauth.production?                                    # => true or false
+rodauth.validate_account_id_obfuscation_secret!        # manual secret validation (unambiguous)
+rodauth.validate_secrets!                              # alias for the above — see caveat below
 ```
+
+**`validate_secrets!` is a collision-prone alias.** `hmac_secret_guard` and
+`jwt_secret_guard` each define their *own* `validate_secrets!` that validates a
+completely different secret. When any of these features are co-enabled, whichever
+definition is last in the method-resolution order wins for *all* of them —
+`post_configure` never calls the bare name for exactly this reason (it calls
+`validate_account_id_obfuscation_secret!` directly). Prefer the fully-qualified
+method name for manual calls too; only reach for `validate_secrets!` when you know
+this is the only one of the three features enabled.
 
 ## Backward Compatibility
 
@@ -177,7 +222,7 @@ Rollout and rollback are safe with no schema or data migration:
 - **In-flight email links.** A legacy link carries a decimal id segment
   (`2_abc...`). On decode, `deobfuscate_account_id('2')` returns `nil` (a legacy
   decimal has no version prefix), so the token passes through to Rodauth unchanged.
-  Newly generated links carry `A9F3...`. Both work during and after rollout.
+  Newly generated links carry `AE946...`. Both work during and after rollout.
 - **Legacy remember cookies.** Same rule: a numeric cookie id has no version prefix,
   so it is used as-is. Existing logged-in users are **not** forced to re-login.
 - **Rollback.** Remove `enable :account_id_obfuscation`. New links/cookies revert to
@@ -197,6 +242,13 @@ schedule using version-keyed selection:
 1. Generate a new secret and pick a new version char (e.g. `B`).
 2. Move the current secret into `account_id_obfuscation_previous_secrets` under its
    old version char.
+
+Every version char (current + all previous) is validated at boot: each must be a
+single non-digit character, distinct from `token_separator` and `_`, and distinct
+from every other version char in use. A digit, a duplicate, or a
+`previous_secrets` entry shorter than 32 bytes all raise `Rodauth::ConfigurationError`
+immediately at `post_configure` — rotation mistakes fail closed at deploy time
+rather than surfacing as silent decode failures later.
 
 ```ruby
 plugin :rodauth do
@@ -244,8 +296,8 @@ confidential data.**
 
 ```ruby
 cipher = Rodauth::Tools::AccountIdCipher.new(ENV.fetch('ACCOUNT_ID_SECRET'))
-cipher.encode(2)            # => "9F3K2M0QALZ7T"  (13 chars, no version tag)
-cipher.decode('9F3K2M0QALZ7T')  # => 2
+cipher.encode(2)              # => "E946V4SD7Z7RV"  (13 chars, no version tag)
+cipher.decode('E946V4SD7Z7RV')  # => 2
 cipher.decode('not-a-token')    # => nil
 ```
 

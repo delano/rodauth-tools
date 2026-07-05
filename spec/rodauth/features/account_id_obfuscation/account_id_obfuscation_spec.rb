@@ -15,6 +15,11 @@ RSpec.describe 'AccountIdObfuscation' do
       String :email, null: false
       Integer :status_id, default: 2
     end
+    d.create_table(:account_remember_keys) do
+      foreign_key :id, :accounts, primary_key: true, type: :Bignum
+      String :key, null: false
+      DateTime :deadline
+    end
     d[:accounts].insert(email: 'user@example.com', status_id: 2) # id = 1
     d
   end
@@ -50,6 +55,16 @@ RSpec.describe 'AccountIdObfuscation' do
     $stderr.string
   ensure
     $stderr = old_stderr
+  end
+
+  # Stubs +response+/+request+ on a Rodauth instance so +_set_remember_cookie+
+  # can run outside a real HTTP cycle. Returns the Hash that
+  # Rack::Utils.set_cookie_header! writes into, keyed by header name.
+  def stub_cookie_write(rodauth)
+    headers = {}
+    rodauth.define_singleton_method(:response) { Struct.new(:headers).new(headers) }
+    rodauth.define_singleton_method(:request) { Struct.new(:ssl?).new(false).tap { |s| def s.ssl? = false } }
+    headers
   end
 
   describe 'enabling the feature' do
@@ -167,6 +182,60 @@ RSpec.describe 'AccountIdObfuscation' do
     end
   end
 
+  describe 'rotation input validation (Findings #4, #5)' do
+    it 'raises for a digit previous-version key' do
+      expect do
+        create_roda_app do
+          enable :account_id_obfuscation
+          account_id_obfuscation_secret 'a' * 40
+          account_id_obfuscation_previous_secrets({ '1' => 'b' * 40 })
+          production_env_check false
+        end
+      end.to raise_error(Rodauth::ConfigurationError, /single non-digit/)
+    end
+
+    it 'raises when a previous-version key collides with the current version' do
+      expect do
+        create_roda_app do
+          enable :account_id_obfuscation
+          account_id_obfuscation_secret 'a' * 40
+          account_id_obfuscation_key_version 'A' # default, spelled out for clarity
+          account_id_obfuscation_previous_secrets({ 'A' => 'b' * 40 })
+          production_env_check false
+        end
+      end.to raise_error(Rodauth::ConfigurationError, /single non-digit/)
+    end
+
+    it 'raises when a previous secret is shorter than 32 bytes, at boot rather than lazily' do
+      expect do
+        create_roda_app do
+          enable :account_id_obfuscation
+          account_id_obfuscation_secret 'a' * 40
+          account_id_obfuscation_key_version 'B'
+          account_id_obfuscation_previous_secrets({ 'A' => 'too-short' })
+          production_env_check true
+        end
+      end.to raise_error(Rodauth::ConfigurationError, /at least 32 bytes/)
+    end
+
+    it 'accepts multiple distinct previous-version keys without a false-positive collision' do
+      rodauth = create_roda_app do
+        enable :account_id_obfuscation
+        account_id_obfuscation_secret 'a' * 40
+        account_id_obfuscation_key_version 'C'
+        account_id_obfuscation_previous_secrets({ 'A' => 'x' * 40, 'B' => 'y' * 40 })
+        production_env_check false
+      end.rodauth.allocate
+
+      expect(rodauth.obfuscate_account_id(1)).to start_with('C')
+    end
+
+    it 'still deobfuscates a 14-digit legacy id to nil under a valid config' do
+      rodauth = default_app.rodauth.allocate
+      expect(rodauth.deobfuscate_account_id('12345678901234')).to be_nil
+    end
+  end
+
   describe 'key version validation' do
     it 'raises for a digit version tag' do
       expect do
@@ -207,6 +276,16 @@ RSpec.describe 'AccountIdObfuscation' do
       expect do
         create_roda_app do
           enable :account_id_obfuscation
+          production_env_check true
+        end
+      end.to raise_error(Rodauth::ConfigurationError, /ACCOUNT_ID_SECRET/)
+    end
+
+    it 'raises in production when the secret is present but blank (whitespace-only)' do
+      expect do
+        create_roda_app do
+          enable :account_id_obfuscation
+          account_id_obfuscation_secret ' ' * 40
           production_env_check true
         end
       end.to raise_error(Rodauth::ConfigurationError, /ACCOUNT_ID_SECRET/)
@@ -293,20 +372,73 @@ RSpec.describe 'AccountIdObfuscation' do
       end
     end
 
-    it 'installs the cookie overrides on the Auth subclass when remember is enabled' do
-      auth = remember_app.rodauth
-      expect(auth.instance_method(:_get_remember_cookie).owner).to eq(auth)
-      expect(auth.instance_method(:_set_remember_cookie).owner).to eq(auth)
+    it 'round-trips: writes an obfuscated cookie, then reads the real id back out of it' do
+      r = remember_app.rodauth.allocate
+      headers = stub_cookie_write(r)
+
+      r.send(:_set_remember_cookie, 1, 'remkey', Time.now + 1000)
+      raw_value = headers.values.join[/_remember=([^;]+)/, 1]
+      expect(raw_value).not_to be_nil
+      expect(raw_value).to start_with(r.obfuscate_account_id(1))
+
+      fake_request = Struct.new(:cookies).new({ '_remember' => raw_value })
+      r.define_singleton_method(:request) { fake_request }
+
+      # remember.rb's own cookie value is "<id>_<converted key>"; the key half
+      # is opaque here (an HMAC, not the raw value) -- only the id half is
+      # ours to deobfuscate, so compare against the same conversion.
+      expect(r.send(:_get_remember_cookie)).to eq("1_#{r.send(:convert_token_key, "remkey")}")
     end
 
-    it 'does not install the overrides when the toggle is off' do
-      auth = remember_app(obfuscate_cookie: false).rodauth
-      expect(auth.instance_method(:_get_remember_cookie).owner).not_to eq(auth)
+    it 'with the toggle off, writes a byte-identical cookie header to stock remember' do
+      deadline = Time.now + 1000
+
+      off = remember_app(obfuscate_cookie: false).rodauth.allocate
+      off_headers = stub_cookie_write(off)
+      off.send(:_set_remember_cookie, 1, 'remkey', deadline)
+
+      stock = create_roda_app do
+        enable :login, :remember
+        hmac_secret 'h' * 32
+      end.rodauth.allocate
+      stock_headers = stub_cookie_write(stock)
+      stock.send(:_set_remember_cookie, 1, 'remkey', deadline)
+
+      expect(off_headers).to eq(stock_headers)
     end
 
-    it 'does not install the overrides when remember is not enabled' do
+    # Regression test: the remember-cookie wrapper is installed directly on the
+    # Auth class so it wins no matter where account_id_obfuscation sits relative
+    # to remember in the enable list. An earlier design used ordinary module
+    # methods, which remember's own _set_remember_cookie silently shadowed (thus
+    # skipping obfuscation) whenever this feature was enabled BEFORE remember.
+    [%i[login remember account_id_obfuscation],
+     %i[account_id_obfuscation login remember]].each do |feature_order|
+      it "obfuscates the remember cookie regardless of enable order (#{feature_order.join(", ")})" do
+        app = create_roda_app do
+          enable(*feature_order)
+          hmac_secret 'h' * 32
+          account_id_obfuscation_secret 'a' * 40
+          production_env_check false
+        end
+        r = app.rodauth.allocate
+        headers = stub_cookie_write(r)
+
+        r.send(:_set_remember_cookie, 1, 'remkey', Time.now + 1000)
+        raw_value = headers.values.join[/_remember=([^;]+)/, 1]
+
+        expect(raw_value).not_to be_nil
+        expect(raw_value).to start_with(r.obfuscate_account_id(1))
+        expect(raw_value).not_to start_with('1_') # never the plaintext id
+      end
+    end
+
+    it 'does not install the cookie overrides when remember is not enabled' do
+      # default_app enables account_id_obfuscation WITHOUT remember, so
+      # install_remember_cookie_obfuscation is never called and the class-level
+      # overrides never exist -- nothing to wrap, no accidental interference.
       auth = default_app.rodauth
-      expect(auth.private_instance_methods).not_to include(:_get_remember_cookie)
+      expect(auth.private_instance_methods).not_to include(:_set_remember_cookie, :_get_remember_cookie)
     end
 
     it 'decodes the id segment of an obfuscated cookie on read' do
@@ -346,6 +478,72 @@ RSpec.describe 'AccountIdObfuscation' do
       # These remain owned by Rodauth's base feature, not our subclass/feature.
       expect(auth.instance_method(:split_token).owner).not_to eq(auth)
       expect(auth.instance_method(:convert_token_id).owner).not_to eq(auth)
+    end
+  end
+
+  describe 'internal_request composition (Finding #2 regression net)' do
+    it 'does not double-obfuscate (or crash) the remember cookie through the internal_request subclass' do
+      app = create_roda_app do
+        enable :login, :remember, :account_id_obfuscation, :internal_request
+        hmac_secret 'h' * 32
+        account_id_obfuscation_secret 'a' * 40
+        production_env_check false
+      end
+
+      # internal_request's own post_configure creates this subclass of the
+      # already-configured Auth class and re-runs post_configure on it -- the
+      # exact scenario that used to double-install the cookie override.
+      internal_class = app.rodauth.const_get(:InternalRequest)
+      r = internal_class.allocate
+      headers = stub_cookie_write(r)
+
+      expect { r.send(:_set_remember_cookie, 1, 'remkey', Time.now + 1000) }.not_to raise_error
+
+      raw_value = headers.values.join[/_remember=([^;]+)/, 1]
+      # Single-obfuscation: the id half is exactly obfuscate_account_id(1). If
+      # the old bug were present, the id passed to remember.rb's real
+      # _set_remember_cookie would itself be an obfuscated (non-decimal)
+      # string, and Integer() on it inside a second round of obfuscation would
+      # have raised before we ever got here.
+      expect(raw_value).to start_with(r.obfuscate_account_id(1))
+    end
+  end
+
+  describe 'multi-guard co-enablement (Finding #1 regression net)' do
+    before { %w[ACCOUNT_ID_SECRET HMAC_SECRET JWT_SECRET].each { |k| ENV.delete(k) } }
+    after { %w[ACCOUNT_ID_SECRET HMAC_SECRET JWT_SECRET].each { |k| ENV.delete(k) } }
+
+    {
+      hmac_secret_guard: { env: 'HMAC_SECRET', error: /HMAC_SECRET/ },
+      jwt_secret_guard: { env: 'JWT_SECRET', error: /JWT_SECRET/ }
+    }.each do |guard, cfg|
+      [[guard, :account_id_obfuscation], [:account_id_obfuscation, guard]].each do |order|
+        context "with #{guard} + account_id_obfuscation enabled in order #{order.inspect}" do
+          it 'still raises the ACCOUNT_ID_SECRET error when the sibling guard secret is present ' \
+             'but ACCOUNT_ID_SECRET is not (the collision this feature used to hide behind)' do
+            ENV[cfg[:env]] = 'g' * 40
+
+            expect do
+              create_roda_app do
+                enable(*order)
+                production_env_check true
+              end
+            end.to raise_error(Rodauth::ConfigurationError, /ACCOUNT_ID_SECRET/)
+          end
+
+          it "still raises #{guard}'s own error when ACCOUNT_ID_SECRET is present but its secret is not " \
+             '(no reverse shadowing)' do
+            ENV['ACCOUNT_ID_SECRET'] = 'a' * 40
+
+            expect do
+              create_roda_app do
+                enable(*order)
+                production_env_check true
+              end
+            end.to raise_error(Rodauth::ConfigurationError, cfg[:error])
+          end
+        end
+      end
     end
   end
 end

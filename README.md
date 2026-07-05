@@ -209,7 +209,7 @@ class RodauthApp < Roda
 end
 ```
 
-Links change from `/verify-account?key=2_SspVz...` to `/verify-account?key=A9F3K2M0QALZ7T_SspVz...`.
+Links change from `/verify-account?key=2_SspVz...` to `/verify-account?key=AE946V4SD7Z7RV_SspVz...`.
 
 **Key Features:**
 

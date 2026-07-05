@@ -93,6 +93,28 @@ RSpec.describe Rodauth::Tools::AccountIdCipher do
     end
   end
 
+  describe '#decode rejects non-canonical tokens (Finding #8)' do
+    it 'returns nil for a well-formed but non-canonical token (first char shifted +16 alphabet positions)' do
+      # 13 Crockford chars encode 65 bits for a 64-bit block, so the first
+      # (most-significant) char of any token +encode+ actually produces always
+      # has an alphabet index < 16 -- the top of those 5 bits is discarded by
+      # the 64-bit mask. Shifting that index up by 16 yields a second,
+      # non-canonical 13-char string that decrypts to the same id but is never
+      # itself an +encode+ output.
+      canonical = cipher.encode(2)
+      idx = described_class::ALPHABET.index(canonical[0])
+      non_canonical = "#{described_class::ALPHABET[idx + 16]}#{canonical[1..]}"
+
+      expect(non_canonical.length).to eq(described_class::WIDTH)
+      expect(non_canonical).not_to eq(canonical)
+      expect(cipher.decode(non_canonical)).to be_nil
+    end
+
+    it 'does not reject any legitimately-minted token' do
+      boundary_ids.each { |id| expect(cipher.decode(cipher.encode(id))).to eq(id) }
+    end
+  end
+
   describe 'key dependence' do
     it 'produces different ciphertext under a different secret' do
       other = described_class.new('b' * 32)
