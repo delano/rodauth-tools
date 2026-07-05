@@ -192,7 +192,38 @@ end
 
 **Documentation:** [docs/features/jwt-secret-guard.md](docs/features/jwt-secret-guard.md)
 
-### 5. Sequel Migration Generator
+### 5. Account ID Obfuscation Feature
+
+Obfuscate the numeric `account_id` that leaks into email-verification links and the
+remember-me cookie, with no database schema change.
+
+```ruby
+class RodauthApp < Roda
+  plugin :rodauth do
+    enable :login, :verify_account, :remember
+    enable :account_id_obfuscation
+
+    # Production: raises error if ACCOUNT_ID_SECRET (>= 32 bytes) missing
+    # Development: uses fallback secret with warning
+  end
+end
+```
+
+Links change from `/verify-account?key=2_SspVz...` to `/verify-account?key=A9F3K2M0QALZ7T_SspVz...`.
+
+**Key Features:**
+
+- Keyed, reversible obfuscation (4-round Feistel format-preserving encryption)
+- Covers all email-link features + the remember cookie via two scoped overrides
+- Leaves `split_token`/`convert_token_id` untouched, so `jwt_refresh` is unaffected
+- Backward compatible: in-flight numeric links and legacy cookies keep working
+- Version-tagged tokens enable config-driven secret rotation
+- Dedicated `ACCOUNT_ID_SECRET` (>= 32 bytes), independent of HMAC/JWT secrets
+- Standalone `Rodauth::Tools::AccountIdCipher` primitive (stdlib `openssl` only)
+
+**Documentation:** [docs/features/account-id-obfuscation.md](docs/features/account-id-obfuscation.md)
+
+### 6. Sequel Migration Generator
 
 Generate database migrations for Rodauth features.
 
@@ -306,6 +337,7 @@ Rodauth Features are modules that mix into `Rodauth::Auth` instances at runtime.
 - **[External Identity Feature](docs/features/external-identity.md)** - Track external service identifiers
 - **[HMAC Secret Guard Feature](docs/features/hmac-secret-guard.md)** - Validate HMAC secrets at startup
 - **[JWT Secret Guard Feature](docs/features/jwt-secret-guard.md)** - Validate JWT secrets at startup
+- **[Account ID Obfuscation Feature](docs/features/account-id-obfuscation.md)** - Hide numeric account ids in email links and cookies
 - **[Sequel Migrations](docs/sequel-migrations.md)** - Integrating table_guard with Sequel migrations
 - **[Rodauth Feature API](docs/rodauth-features-api.md)** - Complete DSL reference for feature development
 - **[Rodauth Integration](docs/rodauth-integration.md)** - Framework integration patterns

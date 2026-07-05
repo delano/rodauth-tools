@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Framework-agnostic utilities for Rodauth authentication:
 
-1. **External Rodauth Features** - `table_guard` for database validation, `external_identity` for external service IDs, `hmac_secret_guard` for HMAC secret validation, `jwt_secret_guard` for JWT secret validation
+1. **External Rodauth Features** - `table_guard` for database validation, `external_identity` for external service IDs, `hmac_secret_guard` for HMAC secret validation, `jwt_secret_guard` for JWT secret validation, `account_id_obfuscation` for hiding numeric account ids in email links and cookies
 2. **Sequel Migration Generator** - Generate migrations for 19 Rodauth features
 
 **Not a framework adapter.** For Rails integration, use rodauth-rails. This project demonstrates Rodauth's extensibility and provides reference implementations.
@@ -57,6 +57,21 @@ bin/console
 - Deletes secret from ENV after loading for security
 - Provides `production?` and `validate_secrets!` public methods
 - Defines `jwt_secret` configuration method for standalone use
+
+**lib/rodauth/features/account_id_obfuscation.rb** - External Rodauth feature
+
+- Uses `Rodauth::Feature.define(:account_id_obfuscation, :AccountIdObfuscation)` pattern
+- Obfuscates `account_id` in email-link tokens and the remember cookie via scoped `token_param_value`/`account_from_key` (and conditional `_set_/_get_remember_cookie`) overrides
+- Never touches the global `split_token`/`convert_token_id`, so `jwt_refresh` and other token consumers are unaffected
+- Loads a dedicated `ACCOUNT_ID_SECRET` like the secret guards; `production?`/`validate_secrets!` lifecycle
+- Non-digit version tag makes legacy-vs-obfuscated deterministic and drives config-driven secret rotation
+- Delegates the crypto to the standalone `Rodauth::Tools::AccountIdCipher`
+
+**lib/rodauth/tools/account_id_cipher.rb** - Framework-agnostic utility
+
+- Keyed format-preserving obfuscation of a 64-bit integer id (4-round Feistel network, HMAC-SHA256 round function)
+- Pure `Integer <-> 13-char Crockford Base32` bijection; stdlib `openssl` only, independently testable
+- `decode` returns `nil` on malformed input so callers can pass legacy/foreign values through
 
 **lib/rodauth/tools/migration.rb** - Sequel migration generator
 
