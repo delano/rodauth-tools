@@ -356,9 +356,9 @@ RSpec.describe 'Rodauth external_identity :autocreate + table_guard sequel_mode 
           external_identity_column :stripe_customer_id
         end
       end.to raise_error(ArgumentError) do |error|
-        expect(error.message).to match(/autocreate/)
-        expect(error.message).to match(/Sequel\.migration/)
-        expect(error.message).to match(/add_column :stripe_customer_id/)
+        expect(error.message).to include('autocreate')
+        expect(error.message).to include('Sequel.migration')
+        expect(error.message).to include('add_column :stripe_customer_id')
       end
     end
 
