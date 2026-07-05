@@ -462,7 +462,12 @@ module Rodauth
     def existing_table_names
       names = db.tables.map(&:to_sym)
       names.concat(db.views.map(&:to_sym)) if db.respond_to?(:views)
-      names.to_set
+      # Set.new (not names.to_set): referencing the Set constant triggers its
+      # autoload on Ruby >= 3.2 (the gem's floor), whereas Enumerable#to_set is
+      # only defined once 'set' is already loaded. Using to_set here would rely
+      # on a dependency having required 'set' first and could otherwise raise
+      # NoMethodError. This also keeps Lint/RedundantRequireStatement satisfied.
+      Set.new(names)
     end
 
     # Determine whether a table identifier is schema-qualified.
