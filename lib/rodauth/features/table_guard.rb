@@ -198,9 +198,14 @@ module Rodauth
     def missing_tables
       result = []
 
+      # Fetch the set of existing table names ONCE for this pass and reuse it
+      # across every table check, instead of running a catalog query per table
+      # (N+1). See #table_exists? for why the set is not cached on the instance.
+      existing = existing_table_names
+
       table_configuration.each do |method, info|
         table_name = info[:name]
-        next if table_exists?(table_name)
+        next if table_exists?(table_name, existing)
 
         result << {
           method: method,
@@ -222,27 +227,58 @@ module Rodauth
 
     # Check if a table exists in the database
     #
-    # Uses the database's table list (db.tables) rather than probing each table
-    # with a SELECT. Sequel's db.table_exists? probe logs the "no such table"
-    # exception before catching it internally, which the previous implementation
-    # worked around by clearing and restoring the shared db.loggers array around
-    # the call. That mutation of shared connection state was not thread-safe:
-    # a concurrent query (e.g. when table_status/column_status are called at
-    # runtime) could execute while logging was disabled. Listing tables avoids
-    # the failed probe entirely, so no logger suppression — and no shared-state
-    # mutation — is needed.
+    # For the common case (an unqualified base table in the default schema) this
+    # matches against the database's table/view list rather than probing each
+    # table with a SELECT. Sequel's db.table_exists? probe logs the "no such
+    # table" exception before catching it internally, which an earlier
+    # implementation worked around by clearing and restoring the shared
+    # db.loggers array around the call. That mutation of shared connection state
+    # was not thread-safe: a concurrent query (e.g. when table_status/
+    # column_status are called at runtime) could execute while logging was
+    # disabled. Matching against the listed names avoids the failed probe
+    # entirely, so no logger suppression — and no shared-state mutation — is
+    # needed. Views are included (via db.views when the adapter supports it)
+    # because a Rodauth table can legitimately be backed by a view, which
+    # db.tables alone omits on most adapters.
+    #
+    # Schema-qualified names (a Symbol like :auth__accounts, a
+    # Sequel::SQL::QualifiedIdentifier, or a Sequel.qualify(...) result) are NOT
+    # reflected in db.tables (which returns unqualified names from the current
+    # search_path), so they take a separate, schema-aware path: we probe with
+    # db.table_exists?. That probe can emit Sequel's error-log noise, but it is
+    # confined to this rare qualified path and never fires for the common
+    # unqualified case that #116 was about.
+    #
+    # The optional existing_tables argument lets looping callers
+    # (missing_tables, table_status) build the existing-name Set ONCE per
+    # introspection pass and reuse it, avoiding N catalog queries. When omitted
+    # (the single-name public call) a fresh set is fetched — the set is
+    # deliberately NOT cached on the instance so runtime introspection does not
+    # go stale if tables are created after boot.
     #
     # NOTE: On a genuine error we still fail open (assume the table exists) to
     # preserve current behavior; switching this to fail closed is tracked in the
     # table_guard hardening follow-up (issue #116).
     #
-    # @param table_name [String, Symbol] Table name
+    # @param table_name [String, Symbol, Sequel::SQL::QualifiedIdentifier] Table name
+    # @param existing_tables [Set<Symbol>, nil] Pre-fetched existing table names
     # @return [Boolean] True if table exists
-    def table_exists?(table_name)
-      return true if table_guard_skip_tables.include?(table_name.to_sym) ||
-                     table_guard_skip_tables.include?(table_name.to_s)
+    def table_exists?(table_name, existing_tables = nil)
+      # Symbol/String names may be skipped by configuration. A
+      # QualifiedIdentifier does not respond to to_sym, so guard the lookup.
+      if table_name.respond_to?(:to_sym) &&
+         (table_guard_skip_tables.include?(table_name.to_sym) ||
+          table_guard_skip_tables.include?(table_name.to_s))
+        return true
+      end
 
-      db.tables.map(&:to_sym).include?(table_name.to_sym)
+      # Qualified names live outside the current search_path's unqualified
+      # listing, so probe them directly (schema-aware) rather than matching the
+      # Set. Rare path — the log noise this can produce does not hit boot.
+      return db.table_exists?(table_name) if qualified_table_name?(table_name)
+
+      existing_tables ||= existing_table_names
+      existing_tables.include?(table_name.to_sym)
     rescue StandardError => e
       rodauth_warn("[table_guard] Unable to check table existence for #{table_name}: #{e.message}")
       true # Assume exists to avoid false positives (see hardening follow-up #116)
@@ -259,12 +295,15 @@ module Rodauth
     #
     # @return [Array<Hash>] Status information for each table
     def table_status
+      # Build the existing-name set once and reuse it (see missing_tables).
+      existing = existing_table_names
+
       table_configuration.map do |method, info|
         {
           method: method,
           table: info[:name],
           feature: info[:feature],
-          exists: table_exists?(info[:name])
+          exists: table_exists?(info[:name], existing)
         }
       end
     end
@@ -410,6 +449,40 @@ module Rodauth
     end
 
     private
+
+    # Build the set of unqualified table names that currently exist, including
+    # views (which db.tables omits on most adapters but which can legitimately
+    # back a Rodauth table).
+    #
+    # Fetched fresh on each call — never memoized on the instance — so runtime
+    # introspection reflects tables created after boot. Looping callers pass the
+    # result into #table_exists? to fetch it only once per pass (see #116 / N+1).
+    #
+    # @return [Set<Symbol>] Existing base-table and view names
+    def existing_table_names
+      names = db.tables.map(&:to_sym)
+      names.concat(db.views.map(&:to_sym)) if db.respond_to?(:views)
+      names.to_set
+    end
+
+    # Determine whether a table identifier is schema-qualified.
+    #
+    # Qualified identifiers are not present in db.tables (which lists unqualified
+    # names from the current search_path), so #table_exists? routes them to a
+    # schema-aware probe instead of the Set match.
+    #
+    # Recognizes Sequel's qualified forms: a QualifiedIdentifier (from
+    # Sequel.qualify) and the implicit-qualification Symbol form :schema__table.
+    # A String with underscores is a literal name, not a qualification.
+    #
+    # @param table_name [Object] Table identifier
+    # @return [Boolean] True if schema-qualified
+    def qualified_table_name?(table_name)
+      return true if defined?(Sequel::SQL::QualifiedIdentifier) &&
+                     table_name.is_a?(Sequel::SQL::QualifiedIdentifier)
+
+      table_name.is_a?(Symbol) && table_name.to_s.include?('__')
+    end
 
     # Resolve table_guard_mode to its symbol value, or nil when it is a
     # block/Proc handler.

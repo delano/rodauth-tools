@@ -299,5 +299,66 @@ RSpec.describe 'TableGuard Simple' do
       rodauth_instance.table_exists?(:accounts)
       expect(db.loggers).to eq([logger])
     end
+
+    it 'returns true for a view-backed name' do
+      # A Rodauth table can be backed by a database view. db.tables omits views
+      # on most adapters, so table_exists? must also consult db.views.
+      create_accounts_table(db)
+      db.create_view(:accounts_view, db[:accounts])
+
+      app = create_roda_app do
+        enable :table_guard
+        table_guard_mode :silent
+      end
+
+      rodauth_instance = app.rodauth.allocate
+      expect(rodauth_instance.table_exists?(:accounts_view)).to be true
+    end
+
+    it 'returns true for a schema-qualified name of an existing table' do
+      # A schema-qualified identifier is not present in db.tables (which lists
+      # unqualified names from the current search_path), so it takes the
+      # schema-aware probe path. SQLite's default schema is "main", so
+      # Sequel.qualify(:main, :accounts) resolves to the existing accounts table.
+      create_accounts_table(db)
+
+      app = create_roda_app do
+        enable :table_guard
+        table_guard_mode :silent
+      end
+
+      rodauth_instance = app.rodauth.allocate
+      qualified = Sequel.qualify(:main, :accounts)
+      expect(rodauth_instance.table_exists?(qualified)).to be true
+    end
+
+    it 'returns false for a schema-qualified name of a missing table' do
+      create_accounts_table(db)
+
+      app = create_roda_app do
+        enable :table_guard
+        table_guard_mode :silent
+      end
+
+      rodauth_instance = app.rodauth.allocate
+      qualified = Sequel.qualify(:main, :does_not_exist)
+      expect(rodauth_instance.table_exists?(qualified)).to be false
+    end
+
+    it 'queries db.tables only once for a full missing_tables pass (no N+1)' do
+      create_accounts_table(db)
+      app = create_roda_app do
+        enable :login, :logout
+        enable :table_guard
+        table_guard_mode :silent
+      end
+
+      rodauth_instance = app.rodauth.allocate
+      allow(db).to receive(:tables).and_call_original
+
+      rodauth_instance.missing_tables
+
+      expect(db).to have_received(:tables).at_most(:twice)
+    end
   end
 end
