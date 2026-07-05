@@ -97,7 +97,7 @@ RSpec.describe 'JwtSecretGuard' do
   end
 
   describe 'development mode fallback' do
-    it 'warns and uses fallback when secret missing' do
+    it 'warns and uses a random fallback when secret missing' do
       output = capture_warnings do
         app = create_roda_app do
           enable :jwt_secret_guard
@@ -106,7 +106,12 @@ RSpec.describe 'JwtSecretGuard' do
 
         expect(app).not_to be_nil
         rodauth_instance = app.rodauth.allocate
-        expect(rodauth_instance.jwt_secret).to eq('dev-only-insecure-example-jwt-secret-needs-to-be-changed-in-prod')
+        secret = rodauth_instance.jwt_secret
+        expect(secret).to be_a(String)
+        expect(secret).not_to be_empty
+        # No longer a constant baked into source
+        expect(secret).not_to eq('dev-only-insecure-example-jwt-secret-needs-to-be-changed-in-prod')
+        expect(secret.length).to be >= 32
       end
 
       expect(output).to include('WARNING')
@@ -332,6 +337,89 @@ RSpec.describe 'JwtSecretGuard' do
       end.to raise_error(Rodauth::ConfigurationError)
 
       ENV.delete('JWT_SECRET')
+    end
+
+    it 'treats a whitespace-only secret as missing in production' do
+      expect do
+        create_roda_app do
+          enable :jwt_secret_guard
+          production_env_check true
+          jwt_secret "   \t\n"
+        end
+      end.to raise_error(Rodauth::ConfigurationError)
+    end
+
+    it 'treats a whitespace-only environment variable as missing' do
+      ENV['JWT_SECRET'] = "   \n"
+
+      expect do
+        create_roda_app do
+          enable :jwt_secret_guard
+          production_env_check true
+        end
+      end.to raise_error(Rodauth::ConfigurationError)
+
+      ENV.delete('JWT_SECRET')
+    end
+  end
+
+  describe 'minimum_secret_length' do
+    it 'is disabled by default (short secret accepted)' do
+      app = create_roda_app do
+        enable :jwt_secret_guard
+        production_env_check true
+        jwt_secret 'short'
+      end
+
+      expect(app).not_to be_nil
+    end
+
+    it 'rejects a too-short secret in production when configured' do
+      expect do
+        create_roda_app do
+          enable :jwt_secret_guard
+          production_env_check true
+          minimum_secret_length 32
+          jwt_secret 'too-short-secret'
+        end
+      end.to raise_error(Rodauth::ConfigurationError, /at least 32/)
+    end
+
+    it 'accepts a sufficiently long secret when configured' do
+      app = create_roda_app do
+        enable :jwt_secret_guard
+        production_env_check true
+        minimum_secret_length 16
+        jwt_secret 'a-secret-that-is-long-enough'
+      end
+
+      expect(app).not_to be_nil
+    end
+
+    it 'does not enforce the minimum outside production' do
+      app = create_roda_app do
+        enable :jwt_secret_guard
+        production_env_check false
+        minimum_secret_length 64
+        jwt_secret 'short-dev-secret'
+      end
+
+      expect(app).not_to be_nil
+      rodauth_instance = app.rodauth.allocate
+      expect(rodauth_instance.jwt_secret).to eq('short-dev-secret')
+    end
+  end
+
+  describe 'validate_jwt_secret!' do
+    it 'provides a collision-free validation entry point' do
+      app = create_roda_app do
+        enable :jwt_secret_guard
+        validate_secrets_on_configure? false
+        production_env_check true
+      end
+
+      rodauth_instance = app.rodauth.allocate
+      expect { rodauth_instance.validate_jwt_secret! }.to raise_error(Rodauth::ConfigurationError)
     end
   end
 end

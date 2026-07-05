@@ -201,4 +201,164 @@ RSpec.describe 'TableGuard Simple' do
 
     expect(app).not_to be_nil
   end
+
+  describe 'sequel generation error handling with a block mode' do
+    # Regression: the rescue in handle_sequel_generation used to evaluate
+    # table_guard_mode directly, which raises ArgumentError when the user
+    # configured a block handler (arity > 0) — masking the real error.
+
+    it 'resolves a block mode to nil instead of invoking it with no args' do
+      app = create_roda_app do
+        enable :table_guard
+        table_guard_mode { |_missing| :continue }
+      end
+
+      rodauth_instance = app.rodauth.allocate
+      expect(rodauth_instance.send(:table_guard_mode_symbol)).to be_nil
+    end
+
+    it 'resolves a symbol mode to its symbol' do
+      app = create_roda_app do
+        enable :table_guard
+        table_guard_mode :silent # avoids raising at boot on the empty test db
+      end
+
+      rodauth_instance = app.rodauth.allocate
+      expect(rodauth_instance.send(:table_guard_mode_symbol)).to eq(:silent)
+    end
+
+    it 'does not crash the error handler when generation fails under a block mode' do
+      require 'tempfile'
+      tmp = Tempfile.new('table_guard_bad_path')
+      # A path whose ancestor is a regular file makes FileUtils.mkdir_p raise,
+      # forcing the rescue in handle_sequel_generation to run.
+      bad_path = "#{tmp.path}/subdir"
+
+      capture_warnings do
+        expect do
+          create_roda_app do
+            enable :table_guard
+            table_guard_mode { |_missing| :continue } # block handler, arity 1
+            table_guard_sequel_mode :migration
+            table_guard_migration_path bad_path
+          end
+        end.not_to raise_error # with the bug: ArgumentError (wrong number of arguments)
+      end
+    ensure
+      tmp&.close
+      tmp&.unlink
+    end
+  end
+
+  describe '#table_exists?' do
+    # These exercise the db.tables-based existence check (which replaced the
+    # SELECT-probe + shared db.loggers mutation).
+
+    it 'returns true for an existing table' do
+      create_accounts_table(db)
+      app = create_roda_app do
+        enable :table_guard
+        table_guard_mode :silent
+      end
+
+      rodauth_instance = app.rodauth.allocate
+      expect(rodauth_instance.table_exists?(:accounts)).to be true
+    end
+
+    it 'returns false for a missing table' do
+      app = create_roda_app do
+        enable :table_guard
+        table_guard_mode :silent
+      end
+
+      rodauth_instance = app.rodauth.allocate
+      expect(rodauth_instance.table_exists?(:does_not_exist)).to be false
+    end
+
+    it 'returns true for a skipped table even when it is missing' do
+      app = create_roda_app do
+        enable :table_guard
+        table_guard_mode :silent
+        table_guard_skip_tables [:does_not_exist]
+      end
+
+      rodauth_instance = app.rodauth.allocate
+      expect(rodauth_instance.table_exists?(:does_not_exist)).to be true
+    end
+
+    it 'does not mutate db.loggers while checking' do
+      require 'logger'
+      logger = Logger.new(StringIO.new)
+      db.loggers << logger
+      app = create_roda_app do
+        enable :table_guard
+        table_guard_mode :silent
+      end
+
+      rodauth_instance = app.rodauth.allocate
+      rodauth_instance.table_exists?(:accounts)
+      expect(db.loggers).to eq([logger])
+    end
+
+    it 'returns true for a view-backed name' do
+      # A Rodauth table can be backed by a database view. db.tables omits views
+      # on most adapters, so table_exists? must also consult db.views.
+      create_accounts_table(db)
+      db.create_view(:accounts_view, db[:accounts])
+
+      app = create_roda_app do
+        enable :table_guard
+        table_guard_mode :silent
+      end
+
+      rodauth_instance = app.rodauth.allocate
+      expect(rodauth_instance.table_exists?(:accounts_view)).to be true
+    end
+
+    it 'returns true for a schema-qualified name of an existing table' do
+      # A schema-qualified identifier is not present in db.tables (which lists
+      # unqualified names from the current search_path), so it takes the
+      # schema-aware probe path. SQLite's default schema is "main", so
+      # Sequel.qualify(:main, :accounts) resolves to the existing accounts table.
+      create_accounts_table(db)
+
+      app = create_roda_app do
+        enable :table_guard
+        table_guard_mode :silent
+      end
+
+      rodauth_instance = app.rodauth.allocate
+      qualified = Sequel.qualify(:main, :accounts)
+      expect(rodauth_instance.table_exists?(qualified)).to be true
+    end
+
+    it 'returns false for a schema-qualified name of a missing table' do
+      create_accounts_table(db)
+
+      app = create_roda_app do
+        enable :table_guard
+        table_guard_mode :silent
+      end
+
+      rodauth_instance = app.rodauth.allocate
+      qualified = Sequel.qualify(:main, :does_not_exist)
+      expect(rodauth_instance.table_exists?(qualified)).to be false
+    end
+
+    it 'queries db.tables only once for a full missing_tables pass (no N+1)' do
+      create_accounts_table(db)
+      app = create_roda_app do
+        enable :login, :logout
+        enable :table_guard
+        table_guard_mode :silent
+      end
+
+      rodauth_instance = app.rodauth.allocate
+      allow(db).to receive(:tables).and_call_original
+
+      rodauth_instance.missing_tables
+
+      expect(db).to have_received(:tables).at_most(:twice)
+    end
+  end
 end
