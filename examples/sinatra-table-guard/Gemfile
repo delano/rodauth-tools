@@ -19,7 +19,7 @@ gem 'sqlite3', '~> 1.7'
 # gem "mysql2", "~> 0.5"  # For MySQL
 
 # Web server
-gem 'puma', '~> 6.0'
+gem 'puma', '~> 7.2'
 
 # Development/debugging
 group :development do
