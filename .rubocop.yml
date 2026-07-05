@@ -11,6 +11,10 @@ AllCops:
   NewCops: enable
   SuggestExtensions: false
 
+Style/OneClassPerFile:
+  Exclude:
+    - 'examples/**/*'
+
 Style/StringLiterals:
   EnforcedStyle: single_quotes
 
