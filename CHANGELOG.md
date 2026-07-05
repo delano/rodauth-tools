@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-07-05
+
+### Added
+
+- **Account ID Obfuscation feature** (`account_id_obfuscation`) - Keyed, reversible
+  obfuscation of the numeric `account_id` that leaks into email-link tokens (e.g.
+  `/verify-account?key=2_...`) and the remember-me cookie, with no database schema
+  change. Wraps the two `email_base` chokepoints (`token_param_value` /
+  `account_from_key`), so a single `enable` covers verify_account, reset_password,
+  email_auth, verify_login_change and lockout/unlock; also obfuscates the remember
+  cookie when `remember` is enabled. Loads a dedicated `ACCOUNT_ID_SECRET` following
+  the `hmac_secret_guard` pattern. Backward compatible with in-flight numeric links
+  and legacy cookies, with config-driven secret rotation via a version tag.
+- **`Rodauth::Tools::AccountIdCipher`** - Framework-agnostic 4-round Feistel
+  format-preserving encryption utility (stdlib `openssl` only, no new dependencies).
+
+## [0.3.1] - 2026-01-13
+
+### Changed
+
+- Dependency and development-tooling maintenance (bundled `rodauth`, `sequel`,
+  `rubocop`, and related updates).
+
 ## [0.3.0] - 2025-11-25
 
 ### Added
@@ -76,6 +99,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Namespace changed from `Rodauth::Rack::Generators::Migration` to `Rodauth::Tools::Migration`
 - Evolution from Rack adapter to framework-agnostic utilities
 
+[0.4.0]: https://github.com/delano/rodauth-tools/compare/v0.3.1...v0.4.0
+[0.3.1]: https://github.com/delano/rodauth-tools/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/delano/rodauth-tools/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/delano/rodauth-tools/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/delano/rodauth-tools/releases/tag/v0.1.0

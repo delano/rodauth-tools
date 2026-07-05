@@ -12,6 +12,7 @@ end
 require_relative 'tools/version'
 require_relative 'tools/migration'
 require_relative 'tools/console_helpers'
+require_relative 'tools/account_id_cipher'
 
 # Load rodauth-tools utilities (only if Rodauth is available)
 if defined?(Rodauth)
@@ -19,6 +20,7 @@ if defined?(Rodauth)
   require_relative 'sequel_generator'
   require_relative 'features/table_guard'
   require_relative 'features/external_identity'
+  require_relative 'features/account_id_obfuscation'
 end
 
 module Rodauth

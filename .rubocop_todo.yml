@@ -155,6 +155,7 @@ Style/Documentation:
   Exclude:
     - 'spec/**/*'
     - 'test/**/*'
+    - 'lib/rodauth/features/account_id_obfuscation.rb'
     - 'lib/rodauth/features/external_identity.rb'
     - 'lib/rodauth/features/hmac_secret_guard.rb'
     - 'lib/rodauth/features/jwt_secret_guard.rb'

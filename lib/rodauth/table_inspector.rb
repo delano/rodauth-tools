@@ -97,7 +97,7 @@ module Rodauth
         next unless feature_module
 
         # Check if this feature module defines the table method
-        return feature_name if feature_module.instance_methods(false).include?(method_name)
+        return feature_name if feature_module.method_defined?(method_name, false)
       end
 
       # Fallback: try to infer from method name if not found in any feature
