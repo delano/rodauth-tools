@@ -201,4 +201,52 @@ RSpec.describe 'TableGuard Simple' do
 
     expect(app).not_to be_nil
   end
+
+  describe 'sequel generation error handling with a block mode' do
+    # Regression: the rescue in handle_sequel_generation used to evaluate
+    # table_guard_mode directly, which raises ArgumentError when the user
+    # configured a block handler (arity > 0) — masking the real error.
+
+    it 'resolves a block mode to nil instead of invoking it with no args' do
+      app = create_roda_app do
+        enable :table_guard
+        table_guard_mode { |_missing| :continue }
+      end
+
+      rodauth_instance = app.rodauth.allocate
+      expect(rodauth_instance.send(:table_guard_mode_symbol)).to be_nil
+    end
+
+    it 'resolves a symbol mode to its symbol' do
+      app = create_roda_app do
+        enable :table_guard
+        table_guard_mode :silent # avoids raising at boot on the empty test db
+      end
+
+      rodauth_instance = app.rodauth.allocate
+      expect(rodauth_instance.send(:table_guard_mode_symbol)).to eq(:silent)
+    end
+
+    it 'does not crash the error handler when generation fails under a block mode' do
+      require 'tempfile'
+      tmp = Tempfile.new('table_guard_bad_path')
+      # A path whose ancestor is a regular file makes FileUtils.mkdir_p raise,
+      # forcing the rescue in handle_sequel_generation to run.
+      bad_path = "#{tmp.path}/subdir"
+
+      capture_warnings do
+        expect do
+          create_roda_app do
+            enable :table_guard
+            table_guard_mode { |_missing| :continue } # block handler, arity 1
+            table_guard_sequel_mode :migration
+            table_guard_migration_path bad_path
+          end
+        end.not_to raise_error # with the bug: ArgumentError (wrong number of arguments)
+      end
+    ensure
+      tmp&.close
+      tmp&.unlink
+    end
+  end
 end

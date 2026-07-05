@@ -414,6 +414,23 @@ module Rodauth
 
     private
 
+    # Resolve table_guard_mode to its symbol value, or nil when it is a
+    # block/Proc handler.
+    #
+    # A block handler (arity > 0) cannot be evaluated without arguments, and a
+    # 0-arity Proc is a custom handler rather than a mode symbol; in both cases
+    # there is no symbol to compare against, so we return nil. This lets callers
+    # do `%i[raise halt exit].include?(table_guard_mode_symbol)` safely instead
+    # of invoking table_guard_mode with the wrong arity.
+    #
+    # @return [Symbol, nil] the configured mode symbol, or nil for block/Proc handlers
+    def table_guard_mode_symbol
+      return nil if method(:table_guard_mode).arity > 0
+
+      value = table_guard_mode
+      value.is_a?(Proc) ? nil : value
+    end
+
     # Handle column validation based on mode setting
     #
     # @param missing_cols [Array<Hash>] Missing column information
@@ -657,7 +674,10 @@ module Rodauth
     rescue StandardError => e
       rodauth_error("[table_guard] Sequel generation failed: #{e.class} - #{e.message}")
       rodauth_error("  Location: #{e.backtrace.first}")
-      raise if %i[raise halt exit].include?(table_guard_mode)
+      # Use the resolved symbol mode: calling table_guard_mode directly would
+      # raise ArgumentError here when the user configured a block handler
+      # (arity > 0), masking the real error `e` we are trying to surface.
+      raise if %i[raise halt exit].include?(table_guard_mode_symbol)
     end
 
     # Check if the database supports CASCADE on DELETE
