@@ -234,7 +234,7 @@ module Rodauth
     #
     # NOTE: On a genuine error we still fail open (assume the table exists) to
     # preserve current behavior; switching this to fail closed is tracked in the
-    # table_guard hardening follow-up.
+    # table_guard hardening follow-up (issue #116).
     #
     # @param table_name [String, Symbol] Table name
     # @return [Boolean] True if table exists
@@ -245,7 +245,7 @@ module Rodauth
       db.tables.map(&:to_sym).include?(table_name.to_sym)
     rescue StandardError => e
       rodauth_warn("[table_guard] Unable to check table existence for #{table_name}: #{e.message}")
-      true # Assume exists to avoid false positives (see hardening follow-up)
+      true # Assume exists to avoid false positives (see hardening follow-up #116)
     end
 
     # List all required table names (sorted)
