@@ -222,9 +222,19 @@ module Rodauth
 
     # Check if a table exists in the database
     #
-    # Temporarily suppresses Sequel's logger to avoid confusing error logs
-    # when checking non-existent tables (Sequel logs SQLite exceptions before
-    # catching them internally).
+    # Uses the database's table list (db.tables) rather than probing each table
+    # with a SELECT. Sequel's db.table_exists? probe logs the "no such table"
+    # exception before catching it internally, which the previous implementation
+    # worked around by clearing and restoring the shared db.loggers array around
+    # the call. That mutation of shared connection state was not thread-safe:
+    # a concurrent query (e.g. when table_status/column_status are called at
+    # runtime) could execute while logging was disabled. Listing tables avoids
+    # the failed probe entirely, so no logger suppression — and no shared-state
+    # mutation — is needed.
+    #
+    # NOTE: On a genuine error we still fail open (assume the table exists) to
+    # preserve current behavior; switching this to fail closed is tracked in the
+    # table_guard hardening follow-up.
     #
     # @param table_name [String, Symbol] Table name
     # @return [Boolean] True if table exists
@@ -232,23 +242,10 @@ module Rodauth
       return true if table_guard_skip_tables.include?(table_name.to_sym) ||
                      table_guard_skip_tables.include?(table_name.to_s)
 
-      # Temporarily suppress Sequel's logger to prevent confusing error logs
-      # during table existence checks. Sequel's table_exists? implementation
-      # attempts a SELECT query and logs the exception if table doesn't exist,
-      # even though it catches the error internally.
-      original_logger = db.loggers.dup
-      db.loggers.clear
-
-      db.table_exists?(table_name)
+      db.tables.map(&:to_sym).include?(table_name.to_sym)
     rescue StandardError => e
       rodauth_warn("[table_guard] Unable to check table existence for #{table_name}: #{e.message}")
-      true # Assume exists to avoid false positives
-    ensure
-      # Restore original loggers
-      if original_logger
-        db.loggers.clear
-        original_logger.each { |logger| db.loggers << logger }
-      end
+      true # Assume exists to avoid false positives (see hardening follow-up)
     end
 
     # List all required table names (sorted)

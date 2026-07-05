@@ -249,4 +249,55 @@ RSpec.describe 'TableGuard Simple' do
       tmp&.unlink
     end
   end
+
+  describe '#table_exists?' do
+    # These exercise the db.tables-based existence check (which replaced the
+    # SELECT-probe + shared db.loggers mutation).
+
+    it 'returns true for an existing table' do
+      create_accounts_table(db)
+      app = create_roda_app do
+        enable :table_guard
+        table_guard_mode :silent
+      end
+
+      rodauth_instance = app.rodauth.allocate
+      expect(rodauth_instance.table_exists?(:accounts)).to be true
+    end
+
+    it 'returns false for a missing table' do
+      app = create_roda_app do
+        enable :table_guard
+        table_guard_mode :silent
+      end
+
+      rodauth_instance = app.rodauth.allocate
+      expect(rodauth_instance.table_exists?(:does_not_exist)).to be false
+    end
+
+    it 'returns true for a skipped table even when it is missing' do
+      app = create_roda_app do
+        enable :table_guard
+        table_guard_mode :silent
+        table_guard_skip_tables [:does_not_exist]
+      end
+
+      rodauth_instance = app.rodauth.allocate
+      expect(rodauth_instance.table_exists?(:does_not_exist)).to be true
+    end
+
+    it 'does not mutate db.loggers while checking' do
+      require 'logger'
+      logger = Logger.new(StringIO.new)
+      db.loggers << logger
+      app = create_roda_app do
+        enable :table_guard
+        table_guard_mode :silent
+      end
+
+      rodauth_instance = app.rodauth.allocate
+      rodauth_instance.table_exists?(:accounts)
+      expect(db.loggers).to eq([logger])
+    end
+  end
 end
