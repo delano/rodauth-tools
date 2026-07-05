@@ -31,7 +31,7 @@ root cause, failure scenario, and a concrete solution.
 | Ticket | Raw items | Fixed | Duplicates of #115 | Distinct unresolved |
 |---|---|---|---|---|
 | #114 (issue + audit comment) | 4 | 3 | — | 1 (RT-01) |
-| #115 (consolidated audit) | 22 | 3 | — | 19 (RT-02 – RT-08, RT-11 – RT-23) |
+| #115 (consolidated audit) | 22 | 3 | — | 19 (RT-02 – RT-07, RT-11 – RT-23) |
 | #116 (table_guard hardening) | 6 | 0 | 3 (→ RT-03, RT-04, RT-07) | 3 (RT-08*, RT-09, RT-10) |
 | **Total** | **32** | **6** | **3** | **23** |
 
@@ -40,8 +40,10 @@ covers two mechanisms that #116 splits into its items 5 and 2. This document
 splits them the same way (#116 item 5 → RT-07 exit(1); #116 item 2 → RT-08 drop
 ordering), so the arithmetic above assigns RT-08 to #116's distinct column.
 
-The one item whose status was previously unknown — `console_helpers.rb` nil-db
-handling (#115 §F) — **has now been checked and is unresolved** (RT-23).
+The one item this audit had not yet verified against `main` —
+`console_helpers.rb` nil-db handling (a listed finding in #115 §F) — **has now
+been checked and is unresolved** (RT-23). "Not yet verified" describes this
+pass's coverage, not #115, which already reports it.
 
 ## Verified fixed
 
@@ -236,7 +238,12 @@ behavior, the config flag is simpler. Document whichever is chosen.
 
 **Regression tests.** Configure two Auth classes sequentially against one env
 var: both must end up with the same, correct secret; the var must be gone from
-`ENV` afterwards (cache variant).
+`ENV` afterwards (cache variant). **Test-isolation caveat for the cache
+variant:** `ENV_SECRET_CACHE` is process-lifetime state, so a spec that
+exercises `load_from_env!` will poison later specs unless it is reset. Add
+`after { Rodauth::SecretGuard::ENV_SECRET_CACHE.clear }` (or a small
+`SecretGuard.reset_env_cache!` test helper) to any spec that touches it;
+otherwise this suite passes in isolation but fails under a different run order.
 
 ---
 
@@ -647,33 +654,42 @@ is removed from the required-table set with **zero output** unless
 generated, never dropped/recreated: the guard's coverage silently shrinks and
 nothing downstream can tell.
 
-**Solution.** Surface failures unconditionally and let callers see them:
+**Solution.** Surface failures unconditionally while **keeping the `Hash`
+return type** — RT-12's fix calls `discover_tables` and iterates it as
+`{method => table_name}`, so the return shape must not change:
 
 ```ruby
 def self.discover_tables(rodauth_instance)
   table_methods = rodauth_instance.methods.select { |m| m.to_s.end_with?('_table') }
 
   tables = {}
-  errors = {}
   table_methods.each do |method|
     table_name = rodauth_instance.send(method)
     tables[method] = table_name if table_name.is_a?(String) || table_name.is_a?(Symbol)
   rescue StandardError => e
-    errors[method] = e
+    (@discovery_errors ||= {})[method] = e
     Kernel.warn "[table_guard] TableInspector: #{method} raised #{e.class}: #{e.message} — " \
                 'this table will NOT be validated or generated'
   end
 
-  [tables, errors]  # or attach errors via a second method to avoid breaking the return type
+  tables  # unchanged shape; RT-12 iterates this hash directly
+end
+
+# Companion accessor for callers that want the structured errors, so nothing
+# depends on a changed return type:
+def self.discovery_errors
+  @discovery_errors || {}
 end
 ```
 
-If changing the return type is too invasive, keep `discover_tables` returning
-the hash and add `TableInspector.discovery_errors(rodauth_instance)` (or record
-the errors on the passed instance); `table_guard` should then include "N table
-methods could not be evaluated" in `check_required_tables!` output and withhold
-the ✅ banner when the count is non-zero (same principle as RT-04: never print
-an all-clear over an unverified set).
+`table_guard` should then include "N table methods could not be evaluated" in
+`check_required_tables!` output and withhold the ✅ banner when
+`discovery_errors` is non-empty (same principle as RT-04: never print an
+all-clear over an unverified set). *If* you would rather return `[tables,
+errors]` as a tuple, that is fine too — but then RT-12's
+`discovered = discover_tables(...)` call must destructure it
+(`tables, = discover_tables(...)`) or the `.to_h` there iterates the array and
+breaks. The Hash-preserving form above avoids that coupling.
 
 **Regression tests.** An Auth class with a raising `*_table` method: warning is
 emitted without `RODAUTH_DEBUG`; `check_required_tables!` output mentions the
@@ -761,7 +777,8 @@ structural fix #115 recommends:
    `SequelGenerator#extract_table_prefix` before returning):
 
 ```ruby
-IDENTIFIER_RE = /\A[a-z_][a-z0-9_]*\z/
+# Same rule as RT-14 (see note there): a valid, unquoted SQL identifier.
+IDENTIFIER_RE = /\A[a-z_][a-z0-9_]*\z/i
 
 def validate_prefix!(prefix)
   return if prefix.to_s.match?(IDENTIFIER_RE)
@@ -816,6 +833,13 @@ IDENTIFIER_RE = /\A[a-z_][a-z0-9_]*\z/i
   end
 end
 ```
+
+**Note — one rule, not two.** This is the *same* `IDENTIFIER_RE` used by RT-13's
+prefix validation (case-insensitive: an unquoted SQL identifier, mixed case
+allowed since case is a style choice, not an injection vector). If both fixes
+land, define it once in a shared location (e.g. a `Rodauth::Tools` constant)
+rather than copying the literal into `migration.rb`/`SequelGenerator` and
+`table_guard.rb`, so the two can't silently drift on case semantics later.
 
 `.inspect` guarantees the emitted literal round-trips as a Symbol no matter
 the content (defense in depth); the registration validation keeps garbage out
