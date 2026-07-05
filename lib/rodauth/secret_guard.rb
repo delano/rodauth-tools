@@ -97,8 +97,14 @@ module Rodauth
       return unless rodauth.production?
       return if value.to_s.strip.length >= minimum
 
+      # Name the secret generically and cite both configuration avenues: the
+      # value may have come from the env var OR from the #{kind}_secret DSL
+      # method, so blaming the env key alone would mislead when a short secret
+      # was configured directly.
+      key = rodauth.send(:"#{kind}_secret_env_key")
       raise Rodauth::ConfigurationError,
-            "#{rodauth.send(:"#{kind}_secret_env_key")} must be at least #{minimum} characters in production"
+            "#{kind.to_s.upcase} secret must be at least #{minimum} characters in production " \
+            "(set via #{key} or #{kind}_secret)"
     end
 
     # @return [Boolean] true when the value is nil, empty, or whitespace-only

@@ -622,9 +622,11 @@ A minimum length is available out of the box via `minimum_secret_length`
 (production only). For anything beyond that, override the kind-specific
 `validate_jwt_secret!` method in your configuration.
 
-> **Note:** `validate_jwt_secret!` does not accept a block. Override the method
-> (not `validate_secrets!`, which is a shared alias) so it keeps working when
-> `hmac_secret_guard` is also enabled.
+> **Note:** `validate_jwt_secret!` does not take a block when *called* at
+> runtime. To customize validation, *override* the method in your configuration
+> (the block form shown below is the Rodauth config-DSL override, not a runtime
+> call). Override `validate_jwt_secret!` — not `validate_secrets!`, which is a
+> shared alias — so it keeps working when `hmac_secret_guard` is also enabled.
 
 ```ruby
 plugin :rodauth do
