@@ -70,6 +70,17 @@ into source. It is therefore never publicly known and is unstable across
 restarts, so it can't be mistaken for a real, persistent secret. Set an explicit
 value only if you need JWTs to remain valid across restarts in development.
 
+> **Caution — multi-process and multi-host environments.** Because the default
+> fallback is generated per process and at random, it is **not** shared across
+> processes or hosts and changes on every restart. Previously-issued JWTs stop
+> validating after a restart, and won't validate across instances in a
+> load-balanced or multi-instance deployment (each process holds a different
+> fallback). This most often bites review apps, staging, CI, and load-balanced
+> development where `RACK_ENV` is not `production` yet more than one process is
+> involved. In those environments, set an explicit, stable
+> `development_jwt_secret_fallback` (or provide a real `JWT_SECRET`) rather than
+> relying on the random default.
+
 ```ruby
 development_jwt_secret_fallback 'my-custom-dev-secret-12345'
 ```
@@ -190,6 +201,14 @@ end
    - Production: Raise error if missing
    - Development: Warn and use fallback
 
+> **Note:** Secrets read from the environment variable are whitespace-trimmed —
+> leading and trailing whitespace is stripped, so `JWT_SECRET=" abc\n"` becomes
+> `"abc"` (this tolerates the trailing newlines common in `.env` files). A value
+> that is entirely whitespace is treated as **absent**, triggering the production
+> error or the development fallback. Secrets set directly via the `jwt_secret`
+> DSL are used verbatim, though the `minimum_secret_length` check measures their
+> length after stripping.
+
 ### Production Mode
 
 When `production?` returns true:
@@ -239,7 +258,10 @@ rodauth.validate_secrets!
 > both guards are enabled this shared name resolves to only one of them, so use
 > the kind-specific `validate_jwt_secret!` / `validate_hmac_secret!` for an
 > unambiguous manual call. Boot-time validation does not rely on the alias —
-> each feature's `post_configure` validates its own secret independently.
+> each feature's `post_configure` validates its own secret independently. The
+> same applies when **overriding** validation: with both guards enabled, override
+> the kind-specific `validate_jwt_secret!` (not `validate_secrets!`), or your
+> override will silently apply to only one of the two secrets.
 
 ### `production?`
 
@@ -583,6 +605,16 @@ plugin :rodauth do
   # Both JWT_SECRET and HMAC_SECRET are validated in post_configure
 end
 ```
+
+> **Shared vs. kind-specific settings.** When both guards are enabled,
+> `minimum_secret_length`, `production_env_check`, and
+> `validate_secrets_on_configure?` are each defined by both features under the
+> same name and are therefore **shared** — you set each once and it applies to
+> **both** secrets; you cannot give JWT and HMAC different values for these. The
+> env key, error messages, and fallback are kind-specific, so they can differ per
+> secret: `jwt_secret_env_key` vs `hmac_secret_env_key`,
+> `jwt_secret_missing_error` vs `hmac_secret_missing_error`, and
+> `development_jwt_secret_fallback` vs `development_hmac_secret_fallback`.
 
 ### Custom Validation Logic
 

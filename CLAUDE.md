@@ -115,7 +115,7 @@ end
 
 ### Table Guard Implementation Details
 
-**Logger Suppression:** The `table_exists?` method temporarily suppresses Sequel's logger during table existence checks. This prevents confusing ERROR logs from Sequel when checking non-existent tables (Sequel's `table_exists?` attempts a SELECT and logs the exception before catching it).
+**Existence Checks (no logger suppression):** The `table_exists?` method matches names against the database's table/view list (`db.tables` + `db.views`) rather than probing each table with a SELECT. An earlier implementation used Sequel's `table_exists?` probe and suppressed the logger around it (clearing/restoring the shared `db.loggers` array) to hide the "no such table" ERROR that Sequel logs before catching internally — but that mutation of shared connection state was not thread-safe. Listing names avoids the failed probe entirely, so no logger suppression (and no shared-state mutation) is needed. Schema-qualified identifiers (a `Sequel::SQL::QualifiedIdentifier` or a `:schema__table` Symbol) are not present in the unqualified list, so they take a separate schema-aware `db.table_exists?` probe path.
 
 **Configuration Storage:** Uses instance variables set by `auth_value_method`:
 
@@ -138,7 +138,7 @@ end
 **Introspection Methods:**
 
 - `all_table_methods` - Finds all methods ending in `_table` using Ruby reflection
-- `missing_tables` - Checks each table method against `db.table_exists?`
+- `missing_tables` - Checks each required table against the existing table/view name set (fetched once per pass to avoid an N+1 of catalog queries)
 - `table_status` - Returns array of hashes with method, table name, and existence status
 
 ### Migration Generator Architecture
