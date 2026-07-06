@@ -263,12 +263,22 @@ module Rodauth
 
     # Execute DROP TABLE operations directly against the database
     #
-    # Uses TemplateInspector to extract ALL tables from ERB templates.
+    # Uses TemplateInspector to extract ALL tables from ERB templates,
+    # including "hidden" tables (account_statuses, account_password_hashes)
+    # that have no corresponding *_table method.
+    #
+    # By default the feature set is derived from missing_tables (the :sync
+    # path). Callers that need to drop the full schema regardless of what is
+    # currently missing — :recreate and :drop, where nothing may be "missing" —
+    # pass an explicit +features+ list so the template enumeration still covers
+    # every enabled feature (and therefore the hidden tables).
     #
     # @param db [Sequel::Database] Database connection
-    def execute_drops(db)
+    # @param features [Array<Symbol>, nil] Explicit feature list to enumerate;
+    #   when nil, features are inferred from missing_tables
+    def execute_drops(db, features: nil)
       # Extract all tables from ERB templates
-      all_tables = extract_all_tables_from_templates
+      all_tables = extract_all_tables_from_templates(features: features)
 
       # Drop in reverse order to handle foreign key dependencies
       ordered_tables = order_tables_for_drop(all_tables).reverse
@@ -336,9 +346,11 @@ module Rodauth
     # like account_statuses and account_password_hashes that don't have
     # corresponding *_table methods in Rodauth.
     #
+    # @param features [Array<Symbol>, nil] Explicit feature list; when nil,
+    #   features are inferred from missing_tables (the :sync/codegen default)
     # @return [Array<Symbol>] Array of all table names
-    def extract_all_tables_from_templates
-      features = extract_features_from_missing_tables
+    def extract_all_tables_from_templates(features: nil)
+      features ||= extract_features_from_missing_tables
       table_prefix = extract_table_prefix
       db_type = extract_db_type
 

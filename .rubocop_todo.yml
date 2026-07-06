@@ -49,7 +49,7 @@ Metrics/AbcSize:
 # Configuration parameters: CountComments, CountAsOne, AllowedMethods, AllowedPatterns, inherit_mode.
 # AllowedMethods: refine
 Metrics/BlockLength:
-  Max: 524
+  Max: 532
 
 # Offense count: 1
 # Configuration parameters: CountComments, CountAsOne.
@@ -64,12 +64,12 @@ Metrics/CyclomaticComplexity:
 # Offense count: 41
 # Configuration parameters: CountComments, CountAsOne, AllowedMethods, AllowedPatterns.
 Metrics/MethodLength:
-  Max: 64
+  Max: 69
 
 # Offense count: 3
 # Configuration parameters: CountComments, CountAsOne.
 Metrics/ModuleLength:
-  Max: 526
+  Max: 534
 
 # Offense count: 10
 # Configuration parameters: AllowedMethods, AllowedPatterns.
@@ -109,6 +109,7 @@ RSpec/DescribeClass:
     - 'spec/rodauth/features/external_identity/external_identity_spec.rb'
     - 'spec/rodauth/features/external_identity_autocreate_integration_spec.rb'
     - 'spec/rodauth/features/secret_guard_combined_spec.rb'
+    - 'spec/rodauth/features/table_guard/table_guard_destructive_modes_spec.rb'
     - 'spec/rodauth/features/table_guard/table_guard_integration_spec.rb'
     - 'spec/rodauth/features/table_guard/table_guard_simple_spec.rb'
     - 'spec/rodauth/features/table_guard/table_guard_spec.rb'
@@ -207,6 +208,7 @@ Style/SafeNavigation:
     - 'spec/rodauth/features/hmac_secret_guard/hmac_secret_guard_spec.rb'
     - 'spec/rodauth/features/jwt_secret_guard/jwt_secret_guard_spec.rb'
     - 'spec/rodauth/features/secret_guard_combined_spec.rb'
+    - 'spec/rodauth/features/table_guard/table_guard_destructive_modes_spec.rb'
     - 'spec/rodauth/features/table_guard/table_guard_simple_spec.rb'
 
 # Offense count: 1
@@ -235,6 +237,7 @@ Style/SymbolProc:
     - 'spec/rodauth/features/hmac_secret_guard/hmac_secret_guard_spec.rb'
     - 'spec/rodauth/features/jwt_secret_guard/jwt_secret_guard_spec.rb'
     - 'spec/rodauth/features/secret_guard_combined_spec.rb'
+    - 'spec/rodauth/features/table_guard/table_guard_destructive_modes_spec.rb'
     - 'spec/rodauth/features/table_guard/table_guard_integration_spec.rb'
     - 'spec/rodauth/features/table_guard/table_guard_simple_spec.rb'
     - 'try/features/external_identity_try.rb'
