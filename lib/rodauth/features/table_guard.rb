@@ -700,22 +700,38 @@ module Rodauth
           return
         end
 
-        # Get all required tables from configuration
-        all_tables = table_configuration.map { |_, info| info[:name] }.uniq
+        # Enumerate every table the enabled features' ERB templates create —
+        # including "hidden" tables such as account_statuses and
+        # account_password_hashes that have no *_table method (RT-09) — and drop
+        # them in FK-dependency order via the generator (the same path :sync
+        # already uses). The previous code dropped only the discovered *_table
+        # names in reversed hash order, so it left the hidden tables in place and
+        # the recreate step then failed with "table account_statuses already
+        # exists", making :recreate unusable with the default schema.
+        features = enabled_template_features
 
-        # Drop all existing tables in reverse dependency order
-        rodauth_info("[table_guard] Recreating #{all_tables.size} table(s) (dropping all, creating fresh)...")
-        drop_tables(all_tables.reverse)
+        rodauth_info("[table_guard] Recreating tables for #{features.size} feature(s) " \
+                     '(dropping all, creating fresh)...')
 
-        # Create all tables fresh (uses missing_tables which should now be all of them)
-        current_missing = missing_tables
-        current_missing_cols = missing_columns
-        if current_missing.any? || current_missing_cols.any?
-          generator_for_all = Rodauth::SequelGenerator.new(current_missing, self, current_missing_cols)
-          generator_for_all.execute_creates(db)
+        # Wrap the whole drop+create cycle in one transaction so a failure
+        # part-way through cannot leave a partially dropped schema (RT-08).
+        # Transactional DDL is a no-op on MySQL (it auto-commits DDL), but it
+        # makes PostgreSQL and SQLite atomic, which is exactly where an
+        # out-of-order drop would otherwise destroy data and then fail.
+        db.transaction do
+          generator.execute_drops(db, features: features)
+
+          # Every required table is now missing, so recreate them all from the
+          # templates (base.erb brings back the hidden tables too).
+          current_missing = missing_tables
+          current_missing_cols = missing_columns
+          if current_missing.any? || current_missing_cols.any?
+            generator_for_all = Rodauth::SequelGenerator.new(current_missing, self, current_missing_cols)
+            generator_for_all.execute_creates(db)
+          end
         end
 
-        rodauth_info("[table_guard] Recreated #{all_tables.size} table(s)")
+        rodauth_info("[table_guard] Recreated tables for #{features.size} feature(s)")
 
         # Re-validate to show success message
         revalidate_after_creation
@@ -730,17 +746,24 @@ module Rodauth
           return
         end
 
-        # Get all required tables from configuration
-        all_tables = table_configuration.map { |_, info| info[:name] }.uniq
+        # Drop every table the enabled features' templates create, hidden
+        # tables included (RT-09), in FK-dependency order via the generator.
+        features = enabled_template_features
 
-        # Drop all existing tables in reverse dependency order
-        rodauth_info("[table_guard] Dropping #{all_tables.size} table(s)...")
-        drop_tables(all_tables.reverse)
+        rodauth_info("[table_guard] Dropping tables for #{features.size} feature(s)...")
 
-        # Drop Sequel migration tracking tables so migrations re-run from scratch
-        drop_tables(%i[schema_info schema_migrations])
+        # One transaction for the whole drop so it is atomic (RT-08).
+        db.transaction do
+          generator.execute_drops(db, features: features)
 
-        rodauth_info("[table_guard] Dropped #{all_tables.size} table(s) and migration tracking")
+          # Drop Sequel migration tracking tables so migrations re-run from
+          # scratch. These are independent leaf tables with no ordering
+          # constraints, so the simple helper is fine; keeping them in the same
+          # transaction makes the whole :drop atomic.
+          drop_tables(%i[schema_info schema_migrations])
+        end
+
+        rodauth_info("[table_guard] Dropped tables for #{features.size} feature(s) and migration tracking")
         rodauth_info('[table_guard] Migrations will run from scratch on next execution')
 
       else
@@ -762,13 +785,37 @@ module Rodauth
       %i[postgres mysql].include?(db.database_type)
     end
 
-    # Drop tables with proper CASCADE handling for non-SQLite databases
+    # Feature names (matching ERB template basenames) for every discovered
+    # required table, de-duplicated.
     #
-    # SQLite doesn't support CASCADE on DROP TABLE, so we need to detect
-    # the database type and avoid using it. For other databases, CASCADE
-    # ensures dependent objects are properly cleaned up.
+    # Used by :recreate/:drop to enumerate the full set of tables to drop from
+    # the templates — including hidden tables like account_statuses — rather
+    # than only the discovered *_table names. A feature whose template is
+    # missing simply contributes no tables (TemplateInspector returns [] for
+    # it), which is consistent with the create path, which likewise cannot
+    # build a table it has no template for.
     #
-    # @param table_names [Array<String, Symbol>] Tables to drop
+    # @return [Array<Symbol>] Enabled feature names that own required tables
+    def enabled_template_features
+      table_configuration.map { |_, info| info[:feature] }.compact.uniq
+    end
+
+    # Drop a set of independent tables (no inter-table foreign keys), with
+    # CASCADE where the adapter supports it.
+    #
+    # This helper does NOT order for foreign-key dependencies. The destructive
+    # sequel modes route their FK-ordered drops through
+    # SequelGenerator#execute_drops, which enumerates the templates (hidden
+    # tables included) and drops child-before-parent. This helper is now used
+    # only for the Sequel migration-tracking tables (:schema_info,
+    # :schema_migrations) in :drop mode, which have no ordering constraints. It
+    # opens no transaction of its own, so a caller can wrap it (together with
+    # execute_drops) in a single transaction for atomicity (RT-08).
+    #
+    # SQLite doesn't support CASCADE on DROP TABLE, so we detect the database
+    # type and avoid it there.
+    #
+    # @param table_names [Array<String, Symbol>] Independent tables to drop
     def drop_tables(table_names)
       table_names.each do |table_name|
         next unless db.table_exists?(table_name)
