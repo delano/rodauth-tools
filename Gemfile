@@ -28,7 +28,7 @@ group :test do
   gem 'rqrcode'
   gem 'sequel-activerecord_connection', '~> 2.0'
   gem 'sqlite3', '~> 2.9'
-  gem 'tilt', '~> 2.7'
+  gem 'tilt', '~> 2.8'
   gem 'tryouts', '~> 3.0'
   gem 'warning'
   gem 'webauthn' unless RUBY_ENGINE == 'jruby'
