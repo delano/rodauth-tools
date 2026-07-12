@@ -1,0 +1,4 @@
+# docs/.gitignore excludes dated markdown notes (`[1-9]*-*.md`) as a general
+# rule for scratch/session docs. Security audit reports use that same
+# YYYY-MM-DD.md naming but are meant to be tracked, so un-ignore them here.
+!*.md
