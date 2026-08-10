@@ -34,9 +34,9 @@ raise "no feature files found under #{features_dir}" if tools_features.empty?
 # on stderr at require time; upstream marks it "RODAUTH3: raise instead of warn",
 # so a miss here becomes a load-time error in the next major release.
 #
-# These examples mirror that audit for the features this gem defines, so the
-# breakage is caught here rather than as boot noise (eventually a boot failure)
-# in a downstream app.
+# For each feature this gem defines, the examples below both re-run that audit
+# and mirror what it checks, so the breakage is caught here rather than as boot
+# noise (eventually a boot failure) in a downstream app.
 RSpec.describe Rodauth::FeatureConfiguration do
   def capture_warnings
     old_stderr = $stderr
