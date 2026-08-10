@@ -14,7 +14,7 @@ gem 'sinatra', '~> 4.0'
 # gem "argon2", "~> 2.0"
 
 # Database adapter - uncomment your choice
-gem 'sqlite3', '~> 1.7'
+gem 'sqlite3', '~> 2.9'
 # gem "pg", "~> 1.5"  # For PostgreSQL
 # gem "mysql2", "~> 0.5"  # For MySQL
 
