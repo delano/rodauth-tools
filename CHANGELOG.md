@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.4.1] - 2026-08-10
 
 ### Fixed
 
@@ -21,6 +21,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `RODAUTH3: raise instead of warn`, so this would have become a load-time error.
   Added `spec/rodauth/feature_configuration_spec.rb`, which mirrors rodauth's
   audit across all five features so a regression fails the suite.
+
+### Added
+
+- **Feature-definition audit coverage** (`spec/rodauth/feature_configuration_spec.rb`).
+  The feature list is derived from `lib/rodauth/features/*.rb` rather than
+  hand-maintained, so a newly added feature is covered as soon as its file lands
+  — and requiring those files is what makes the audit run at all, since rodauth
+  audits inside `Feature.define` and never sees a feature nothing requires.
+  Alongside the mirrored checks, each feature re-runs rodauth's own
+  `def_configuration_methods` with stderr captured and asserts it is silent, so
+  the coverage cannot drift as upstream tightens the audit and honours
+  `allowed_undefined_configuration_methods` (2.45.0's opt-out) without
+  reimplementing it.
 
 ## [0.4.0] - 2026-07-05
 
@@ -116,6 +129,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Namespace changed from `Rodauth::Rack::Generators::Migration` to `Rodauth::Tools::Migration`
 - Evolution from Rack adapter to framework-agnostic utilities
 
+[0.4.1]: https://github.com/delano/rodauth-tools/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/delano/rodauth-tools/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/delano/rodauth-tools/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/delano/rodauth-tools/compare/v0.2.0...v0.3.0

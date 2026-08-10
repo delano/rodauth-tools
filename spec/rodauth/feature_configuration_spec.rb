@@ -3,19 +3,25 @@
 # frozen_string_literal: true
 
 require 'spec_helper'
+require 'stringio'
 
-# hmac_secret_guard/jwt_secret_guard are not auto-required by rodauth/tools.
-require 'rodauth/features/hmac_secret_guard'
-require 'rodauth/features/jwt_secret_guard'
+# Every feature this gem defines, derived from the filesystem rather than a
+# hand-maintained list so a newly added feature is covered the moment its file
+# lands. Each file defines exactly one feature whose name matches its basename.
+#
+# Requiring them here is also what makes the audit below run at all: rodauth
+# audits a feature inside Feature.define, so a feature file nothing requires is
+# never checked. rodauth/tools does not auto-require hmac_secret_guard or
+# jwt_secret_guard, so the spec_helper require alone would miss them.
+features_dir = File.expand_path('../../lib/rodauth/features', __dir__)
+tools_features = Dir["#{features_dir}/*.rb"].map do |path|
+  require path
+  File.basename(path, '.rb').to_sym
+end
 
-# Every feature this gem defines, checked against rodauth's own audit below.
-tools_features = %i[
-  table_guard
-  external_identity
-  account_id_obfuscation
-  hmac_secret_guard
-  jwt_secret_guard
-].freeze
+# Guards the derivation itself: a glob that silently stopped matching would
+# otherwise reduce this whole file to zero examples and still go green.
+raise "no feature files found under #{features_dir}" if tools_features.empty?
 
 # Rodauth 2.45.0 added a definition-time audit of every feature's configuration
 # methods (Rodauth::FeatureConfiguration#_check_method_defined): a configuration
@@ -32,9 +38,34 @@ tools_features = %i[
 # breakage is caught here rather than as boot noise (eventually a boot failure)
 # in a downstream app.
 RSpec.describe Rodauth::FeatureConfiguration do
+  def capture_warnings
+    old_stderr = $stderr
+    $stderr = StringIO.new
+    yield
+    $stderr.string
+  ensure
+    $stderr = old_stderr
+  end
+
   tools_features.each do |feature_name|
     describe "#{feature_name} feature" do
       let(:feature) { Rodauth::FEATURES.fetch(feature_name) }
+
+      # Runs rodauth's OWN audit rather than a copy of it, so this example
+      # cannot drift as upstream tightens the check, and it honours
+      # allowed_undefined_configuration_methods (2.45.0's opt-out, used by
+      # rodauth's json feature for only_json?) for free. Re-running
+      # def_configuration_methods is idempotent: it redefines the same
+      # configuration methods on the same FeatureConfiguration module.
+      #
+      # The two examples below duplicate the checks it performs; they are kept
+      # because upstream only emits a warning string, while they name the
+      # offending methods and say which rule was broken.
+      it "passes rodauth's own feature-definition audit" do
+        warnings = capture_warnings { feature.configuration.def_configuration_methods(feature) }
+
+        expect(warnings).to be_empty
+      end
 
       it 'defines every method it registers a configuration method for' do
         registered = feature.auth_methods + feature.auth_value_methods
