@@ -544,7 +544,7 @@ Nth drop) leaves the schema untouched (PostgreSQL/SQLite).
 
 **Problem.** Both modes enumerate
 `table_configuration.map { |_, info| info[:name] }` — the discovered `*_table`
-methods. By the project's own "Hidden Tables" design (see `CLAUDE.md`),
+methods. By the project's own "Hidden Tables" design (see `AGENTS.md`),
 `account_statuses` and `account_password_hashes` have **no** `*_table` method,
 so they are absent from that list. `:recreate` therefore drops `accounts` but
 leaves the two hidden tables in place, then `execute_creates` re-runs
@@ -1152,7 +1152,7 @@ strategy:
 (Bare minor versions let `ruby/setup-ruby` track patch releases.) If the
 maintainer would rather not support older rubies for an experimental project,
 raise the gemspec floor to `>= 3.4` instead — the bug is the *mismatch*, and
-either edit closes it. Given `CLAUDE.md` calls this a reference
+either edit closes it. Given `AGENTS.md` calls this a reference
 implementation, testing the documented floor is the better look.
 
 ---

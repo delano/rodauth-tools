@@ -1,6 +1,6 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to coding agents working in this repository.
 
 ## Project Purpose
 
@@ -11,15 +11,21 @@ Framework-agnostic utilities for Rodauth authentication:
 
 **Not a framework adapter.** For Rails integration, use rodauth-rails. This project demonstrates Rodauth's extensibility and provides reference implementations.
 
-**Status:** Experimental learning project. Not published to RubyGems.
+**Status:** Experimental. The gemspec says it plainly — "experimental stuff that may come and go" — so treat the API as unstable. It *is* published to RubyGems (`rodauth-tools`), and at least one production app depends on it, so a breaking change is a real cost to someone: bump the version and write the CHANGELOG entry.
 
-**Recent Refactoring (2025-10):** Namespace changed from `Rodauth::Rack::Generators::Migration` to `Rodauth::Tools::Migration`. This reflects the project's evolution away from being a Rack adapter toward being a collection of framework-agnostic utilities. The migration generator is now deprecated in favor of the `table_guard` feature with `sequel_mode`.
+**Namespace history (2025-10):** Namespace changed from `Rodauth::Rack::Generators::Migration` to `Rodauth::Tools::Migration`. This reflects the project's evolution away from being a Rack adapter toward being a collection of framework-agnostic utilities. The migration generator is now deprecated in favor of the `table_guard` feature with `sequel_mode`.
 
 ## Development Commands
 
 ```bash
 # Run all tests
-bundle exec rspec
+bundle exec rspec        # or: bundle exec rake
+
+# Tryouts suite (documentation-style tests; auto-discovers try/, NOT run by CI)
+bundle exec try
+
+# Lint (config in .rubocop.yml, with .rubocop_todo.yml exclusions)
+bundle exec rubocop lib/ spec/
 
 # Interactive console with helpers
 bin/console
@@ -36,6 +42,14 @@ bin/console
 - Provides introspection methods: `missing_tables`, `table_status`, `list_all_required_tables`
 - Configurable modes: `:warn`, `:error`, `:silent`, or custom block handler
 - Demonstrates proper feature lifecycle hooks and configuration DSL
+
+**lib/rodauth/features/external_identity.rb** - External Rodauth feature
+
+- Uses `Rodauth::Feature.define(:external_identity, :ExternalIdentity)` pattern
+- Declares `accounts` columns holding IDs from external services (`external_identity_column :stripe_customer_id`) and generates a reader per column
+- Layer 1 is the bare column plus conflict policy (`external_identity_on_conflict`: `:error`, `:warn`, `:skip`) and column presence checking (`external_identity_check_columns`: `true`, `false`, `:autocreate`)
+- Layer 2 hangs lifecycle callables off the same declaration: `before_create_account`, `formatter`, `validator`, `verifier`, `handshake`
+- Introspection: `external_identity_column_list`, `external_identity_column_config`, `external_identity_status`
 
 **lib/rodauth/features/hmac_secret_guard.rb** - External Rodauth feature
 
@@ -72,6 +86,7 @@ bin/console
 - Keyed format-preserving obfuscation of a 64-bit integer id (4-round Feistel network, HMAC-SHA256 round function)
 - Pure `Integer <-> 13-char Crockford Base32` bijection; stdlib `openssl` only, independently testable
 - `decode` returns `nil` on malformed input so callers can pass legacy/foreign values through
+
 **lib/rodauth/secret_guard.rb** - Shared support module (`Rodauth::SecretGuard`)
 
 - Kind-parameterized (`:hmac`/`:jwt`) logic behind both secret-guard features
@@ -80,6 +95,12 @@ bin/console
   other (each feature's `post_configure` validates its own secret via `kind`)
 - Handles ENV loading (`load_from_env!`), validation (`validate!`), blank/whitespace
   detection, production detection, and minimum-length enforcement
+
+**lib/rodauth/table_inspector.rb** - Shared support module (`Rodauth::TableInspector`)
+
+- Discovers the tables an enabled feature set requires by inspecting a live Rodauth instance, rather than from a static table
+- `discover_tables(rodauth)` returns `{ accounts_table: "accounts", ... }`; `table_information(rodauth)` adds the owning feature and column list per table
+- This is what backs `table_guard`'s `_table_configuration`, so it is the source of the `*_table` method enumeration described under Hidden Tables below
 
 **lib/rodauth/tools/migration.rb** - Sequel migration generator
 
@@ -130,6 +151,13 @@ end
 ### Table Guard Implementation Details
 
 **Existence Checks (no logger suppression):** The `table_exists?` method matches names against the database's table/view list (`db.tables` + `db.views`) rather than probing each table with a SELECT. An earlier implementation used Sequel's `table_exists?` probe and suppressed the logger around it (clearing/restoring the shared `db.loggers` array) to hide the "no such table" ERROR that Sequel logs before catching internally — but that mutation of shared connection state was not thread-safe. Listing names avoids the failed probe entirely, so no logger suppression (and no shared-state mutation) is needed. Schema-qualified identifiers (a `Sequel::SQL::QualifiedIdentifier` or a `:schema__table` Symbol) are not present in the unqualified list, so they take a separate schema-aware `db.table_exists?` probe path.
+
+**Cached-Method Backing Visibility:** `auth_cached_method :foo` registers `foo` via `auth_private_methods`, so the backing `_foo` must be defined **private**. Rodauth 2.45.0 audits this at feature-definition time with `private_method_defined?` and warns (`RODAUTH3: raise instead of warn`) when it isn't — a publicly-defined `_foo` trips the audit even though it exists. `_table_configuration` and `_column_requirements` therefore live below the feature's `private` keyword, alongside the equivalent backing methods in `account_id_obfuscation` and `external_identity`.
+
+`spec/rodauth/feature_configuration_spec.rb` holds the line. Two things about it are load-bearing, so preserve them when editing:
+
+- It **derives** its feature list from `lib/rodauth/features/*.rb` and requires each file. A hardcoded list would leave a new feature silently uncovered — and the require is what makes the audit run at all, since rodauth audits inside `Feature.define` and never sees a feature nothing loaded.
+- Per feature it **re-runs rodauth's own** `def_configuration_methods` with stderr captured and asserts silence, as well as mirroring what that method checks. The re-run cannot drift as upstream tightens the audit and honours `allowed_undefined_configuration_methods` (rodauth's opt-out) for free; the mirrored checks are what name the offending method when it fails.
 
 **Configuration Storage:** Uses instance variables set by `auth_value_method`:
 
@@ -232,9 +260,12 @@ Before TemplateInspector, `generate_drop_statements` only dropped dynamically di
 
 **RSpec Structure:**
 
-- `spec/spec_helper.rb` - Minimal configuration, loads `rodauth/rack`
+- `spec/spec_helper.rb` - Minimal configuration; requires `rodauth/tools` and `rack/test`. It does **not** require `hmac_secret_guard` or `jwt_secret_guard` — those feature files are not loaded by `rodauth/tools`, so a spec that needs them must require them itself
 - Feature specs test both behavior and configuration
 - Migration generator specs verify template output and configuration
+- `spec/rodauth/feature_configuration_spec.rb` - Guards every feature against rodauth's definition-time audit (see Cached-Method Backing Visibility above)
+
+**Tryouts:** `try/features/*_try.rb` holds documentation-style tests, run separately from RSpec (`bundle exec try`). Only `external_identity` has one today. CI runs `bundle exec rake`, whose default task is `spec` alone — so **tryouts is not gated**, and it has drifted red: 5 of 50 fail as of 0.4.1. Don't read a red tryouts run as damage you just caused; check against the base branch first.
 
 **Console Helpers:**
 
@@ -246,16 +277,17 @@ Before TemplateInspector, `generate_drop_statements` only dropped dynamically di
 
 **docs/rodauth-features-api.md** - Complete reference for feature development DSL methods
 
-**docs/rodauth-internals.rdoc** - Object model explanation:
+**docs/rodauth-integration.md** - Integrating Rodauth into a Rack app, and where this library fits
 
-- `Rodauth::Auth` - Authentication class (where features mix in)
-- `Rodauth::Configuration` - Configuration DSL class
-- `Rodauth::Feature` - Module subclass for feature definitions
-- `Rodauth::FeatureConfiguration` - Configuration module for features
+**docs/sequel-migrations.md** - Migration generator usage
 
 **docs/rodauth-mail.md** - Email/SMTP configuration patterns
 
-**DEVELOPMENT.md** - Architectural decisions, standard Rack integration pattern
+**docs/unresolved-bugs.md** - Known defects with analysis, not yet fixed. Read before "fixing" something surprising — it may already be written up here, with the reasoning for why it was left alone
+
+**docs/features/** and **docs/examples/** - Per-feature documentation and runnable examples
+
+Rodauth's own object model (`Rodauth::Auth`, `Rodauth::Configuration`, `Rodauth::Feature`, `Rodauth::FeatureConfiguration`) is documented upstream in `doc/guides/internals.rdoc` in the rodauth gem.
 
 ## Integration Pattern
 
