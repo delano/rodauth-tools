@@ -51,6 +51,13 @@ RSpec.describe Rodauth::FeatureConfiguration do
     describe "#{feature_name} feature" do
       let(:feature) { Rodauth::FEATURES.fetch(feature_name) }
 
+      # A feature may opt individual methods out of the audit by setting
+      # allowed_undefined_configuration_methods (2.45.0; nil unless the feature
+      # assigns it — rodauth's json feature is the only upstream user). The two
+      # mirrors below honour it so they cannot fail a feature that rodauth's own
+      # audit deliberately permits.
+      let(:allowed_undefined) { feature.allowed_undefined_configuration_methods || [] }
+
       # Runs rodauth's OWN audit rather than a copy of it, so this example
       # cannot drift as upstream tightens the check, and it honours
       # allowed_undefined_configuration_methods (2.45.0's opt-out, used by
@@ -69,7 +76,9 @@ RSpec.describe Rodauth::FeatureConfiguration do
 
       it 'defines every method it registers a configuration method for' do
         registered = feature.auth_methods + feature.auth_value_methods
-        undefined = registered.reject { |meth| feature.method_defined?(meth) || feature.private_method_defined?(meth) }
+        undefined = registered.reject do |meth|
+          feature.method_defined?(meth) || feature.private_method_defined?(meth) || allowed_undefined.include?(meth)
+        end
 
         expect(undefined).to be_empty,
                              "#{feature_name} registers configuration methods for #{undefined.join(", ")} " \
@@ -80,9 +89,13 @@ RSpec.describe Rodauth::FeatureConfiguration do
       # register a configuration method that redefines `_foo` PRIVATELY, so
       # rodauth checks the backing method with private_method_defined?. A
       # publicly-defined `_foo` fails that check even though it exists.
+      #
+      # Upstream passes the ALREADY-prefixed name to its opt-out check, so an
+      # opt-out here has to be spelled `:_foo`, not `:foo`. Accepting both would
+      # make this mirror laxer than the audit it mirrors.
       it 'defines each auth_private_methods backing method privately' do
         backing = feature.auth_private_methods.map { |meth| :"_#{meth}" }
-        not_private = backing.reject { |meth| feature.private_method_defined?(meth) }
+        not_private = backing.reject { |meth| feature.private_method_defined?(meth) || allowed_undefined.include?(meth) }
 
         expect(not_private).to be_empty,
                                "#{feature_name} registers private configuration methods whose backing methods " \
