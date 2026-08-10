@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **`table_guard`: silence rodauth 2.45.0 feature-definition warnings.**
+  `_table_configuration` and `_column_requirements` — the backing methods behind
+  the `table_configuration` / `column_requirements` `auth_cached_method`
+  declarations — were defined publicly. Rodauth registers those via
+  `auth_private_methods` and, as of 2.45.0, audits each backing method with
+  `private_method_defined?` at feature-definition time, so loading the feature
+  printed two `"Bug in Rodauth table_guard feature definition..."` warnings on
+  stderr. Both methods moved into the feature's `private` section (matching
+  `account_id_obfuscation` and `external_identity`). Upstream marks the warning
+  `RODAUTH3: raise instead of warn`, so this would have become a load-time error.
+  Added `spec/rodauth/feature_configuration_spec.rb`, which mirrors rodauth's
+  audit across all five features so a regression fails the suite.
+
 ## [0.4.0] - 2026-07-05
 
 ### Added

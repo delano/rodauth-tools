@@ -131,6 +131,8 @@ end
 
 **Existence Checks (no logger suppression):** The `table_exists?` method matches names against the database's table/view list (`db.tables` + `db.views`) rather than probing each table with a SELECT. An earlier implementation used Sequel's `table_exists?` probe and suppressed the logger around it (clearing/restoring the shared `db.loggers` array) to hide the "no such table" ERROR that Sequel logs before catching internally — but that mutation of shared connection state was not thread-safe. Listing names avoids the failed probe entirely, so no logger suppression (and no shared-state mutation) is needed. Schema-qualified identifiers (a `Sequel::SQL::QualifiedIdentifier` or a `:schema__table` Symbol) are not present in the unqualified list, so they take a separate schema-aware `db.table_exists?` probe path.
 
+**Cached-Method Backing Visibility:** `auth_cached_method :foo` registers `foo` via `auth_private_methods`, so the backing `_foo` must be defined **private**. Rodauth 2.45.0 audits this at feature-definition time with `private_method_defined?` and warns (`RODAUTH3: raise instead of warn`) when it isn't — a publicly-defined `_foo` trips the audit even though it exists. `_table_configuration` and `_column_requirements` therefore live below the feature's `private` keyword, alongside the equivalent backing methods in `account_id_obfuscation` and `external_identity`. `spec/rodauth/feature_configuration_spec.rb` mirrors that audit across every feature this gem defines.
+
 **Configuration Storage:** Uses instance variables set by `auth_value_method`:
 
 - Block configs stored as Procs in `@table_guard_mode`

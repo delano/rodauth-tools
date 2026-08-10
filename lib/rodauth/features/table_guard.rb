@@ -136,30 +136,6 @@ module Rodauth
       mode_value != :silent && mode_value != :skip && !mode_value.nil?
     end
 
-    # Internal method called by auth_cached_method :table_configuration
-    #
-    # Discovers and returns table configuration. This is called lazily
-    # per-instance and the result is cached in @table_configuration.
-    #
-    # @return [Hash<Symbol, Hash>] Table configuration
-    def _table_configuration
-      config = Rodauth::TableInspector.table_information(self)
-      rodauth_debug("[table_guard] Discovered #{config.size} required tables") if ENV['RODAUTH_DEBUG']
-      config
-    end
-
-    # Internal method called by auth_cached_method :column_requirements
-    #
-    # Initializes and returns column requirements hash. This is called lazily
-    # per-instance and the result is cached in @column_requirements.
-    #
-    # Structure: { table_name => { column_name => { type:, null:, feature: } } }
-    #
-    # @return [Hash<Symbol, Hash<Symbol, Hash>>] Column requirements by table
-    def _column_requirements
-      {}
-    end
-
     # Check required tables and handle based on mode
     #
     # This is the main entry point for table validation
@@ -449,6 +425,33 @@ module Rodauth
     end
 
     private
+
+    # Backing method for the +table_configuration+ auth_cached_method.
+    #
+    # Discovers and returns table configuration. This is called lazily
+    # per-instance and the result is cached in @table_configuration.
+    #
+    # Must stay private: rodauth registers it via auth_private_methods and (as
+    # of rodauth 2.45.0) warns when the backing method is not defined privately.
+    #
+    # @return [Hash<Symbol, Hash>] Table configuration
+    def _table_configuration
+      config = Rodauth::TableInspector.table_information(self)
+      rodauth_debug("[table_guard] Discovered #{config.size} required tables") if ENV['RODAUTH_DEBUG']
+      config
+    end
+
+    # Backing method for the +column_requirements+ auth_cached_method.
+    #
+    # Initializes and returns column requirements hash. This is called lazily
+    # per-instance and the result is cached in @column_requirements.
+    #
+    # Structure: { table_name => { column_name => { type:, null:, feature: } } }
+    #
+    # @return [Hash<Symbol, Hash<Symbol, Hash>>] Column requirements by table
+    def _column_requirements
+      {}
+    end
 
     # Build the set of unqualified table names that currently exist, including
     # views (which db.tables omits on most adapters but which can legitimately
