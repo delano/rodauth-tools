@@ -230,7 +230,7 @@ GEM
       io-console (~> 0.5)
     roda (3.107.0)
       rack
-    rodauth (2.46.0)
+    rodauth (2.47.0)
       roda (>= 2.6.0)
       sequel (>= 4)
     rotp (6.3.0)
