@@ -13,7 +13,7 @@ GEM
       rdoc (>= 4.0.0)
       reline (>= 0.4.2)
     logger (1.7.0)
-    mail (2.9.0)
+    mail (2.9.1)
       logger
       mini_mime (>= 0.1.1)
       net-imap
@@ -24,14 +24,14 @@ GEM
     mini_portile2 (2.8.9)
     mustermann (3.0.4)
       ruby2_keywords (~> 0.0.1)
-    net-imap (0.5.15)
+    net-imap (0.6.7)
       date
       net-protocol
     net-pop (0.1.2)
       net-protocol
-    net-protocol (0.2.2)
+    net-protocol (0.4.0)
       timeout
-    net-smtp (0.5.1)
+    net-smtp (0.5.2)
       net-protocol
     nio4r (2.7.5)
     pp (0.6.3)
@@ -76,9 +76,9 @@ GEM
       rack-protection (= 4.2.1)
       rack-session (>= 2.0.0, < 3)
       tilt (~> 2.0)
-    sqlite3 (2.9.5)
+    sqlite3 (2.9.6)
       mini_portile2 (~> 2.8.0)
-    sqlite3 (2.9.5-arm64-darwin)
+    sqlite3 (2.9.6-arm64-darwin)
     stringio (3.1.7)
     tilt (2.6.1)
     timeout (0.6.1)
@@ -91,7 +91,7 @@ PLATFORMS
 DEPENDENCIES
   bcrypt (~> 3.1)
   irb (~> 1.8)
-  mail (~> 2.8)
+  mail (~> 2.9)
   pry (~> 0.14)
   puma (~> 7.2)
   rack-session
