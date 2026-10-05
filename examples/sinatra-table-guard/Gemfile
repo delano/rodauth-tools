@@ -3,7 +3,7 @@
 source 'https://rubygems.org'
 
 gem 'bcrypt', '~> 3.1'
-gem 'mail', '~> 2.8' # Required for email-based features (verify_account, etc.)
+gem 'mail', '~> 2.9' # Required for email-based features (verify_account, etc.)
 gem 'rack-session'
 gem 'roda', '~> 3.0'
 gem 'rodauth', '~> 2.0'
