@@ -22,7 +22,7 @@ group :test do
   gem 'bcrypt', '~> 3.1'
   gem 'capybara'
   gem 'jwt', '~> 3.3'
-  gem 'rack-test', '~> 2.1'
+  gem 'rack-test', '~> 2.3'
   gem 'rails', '>= 6.0'
   gem 'rotp'
   gem 'rqrcode'
